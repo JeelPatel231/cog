@@ -20,7 +20,11 @@ class AssistantMessage(BaseModel):
     role: Literal['assistant']
     content: MessageContent
 
-ChatMessage = UserMessage | AssistantMessage
+class ToolResponseMessage(BaseModel):
+    role: Literal['tool_call']
+    content: MessageContent
+
+ChatMessage = UserMessage | AssistantMessage | ToolResponseMessage
 
 class ChatProtocol(Protocol):
     """ 
