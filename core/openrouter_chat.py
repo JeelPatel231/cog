@@ -10,6 +10,7 @@ from core.chat import (
     ChatMessage,
     ChatProtocol,
     ImageMessageContent,
+    SystemMessage,
     TextMessageContent,
     ToolCall,
     ToolResponseMessage,
@@ -177,6 +178,12 @@ class OpenRouterChat(ChatProtocol):
                     "name": message.name,
                 }
             raise ValueError(f"Unsupported content type for ToolResponseMessage: {type(content)!r}")
+
+        elif isinstance(message, SystemMessage):
+            content = message.content
+            if isinstance(content, TextMessageContent):
+                return {"role": "system", "content": content.text}
+            raise ValueError(f"Unsupported content type for SystemMessage: {type(content)!r}")
 
         raise ValueError(f"Unsupported message role: {message.role}")
 

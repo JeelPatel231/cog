@@ -29,7 +29,11 @@ class ToolResponseMessage(BaseModel):
     name: str
     content: MessageContent
 
-ChatMessage = UserMessage | AssistantMessage | ToolResponseMessage
+class SystemMessage(BaseModel):
+    role: Literal['system']
+    content: MessageContent
+
+ChatMessage = UserMessage | AssistantMessage | ToolResponseMessage | SystemMessage
 
 class ChatProtocol(Protocol):
     """ 
