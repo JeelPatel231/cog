@@ -1,16 +1,18 @@
 import asyncio
 
 from dotenv import load_dotenv
+
+from core.event_processors.message import MessageEventProcessor
+from core.processor_registry import EventProcessorRegistry
 load_dotenv()  # Load environment variables from .env file
 
 from core.chat import (
     ChatMessage,
     ImageMessageContent,
     TextMessageContent,
-    ToolCallMessageContent,
     UserMessage,
 )
-from core.event_loop import Event
+from core.event_loop import Event, MessageEvent
 from core.in_memory_event_loop import InMemoryEventLoop
 from core.openrouter_chat import OpenRouterChat
 from core.processor import EventLoopProcessor
@@ -20,34 +22,35 @@ from core.tools import AdditionTool
 
 async def run_once() -> None:
     queue = InMemoryEventLoop()
-    tool_registry = InMemoryToolRegistry()
-    await tool_registry.register_tool(AdditionTool)
+    tool_registry = InMemoryToolRegistry(initial_tools=[AdditionTool])
     tool_provider = ToolProvider(tool_registry)
 
     agent = OpenRouterChat(tool_provider=tool_provider)
-    processor = EventLoopProcessor(event_loop=queue, agent=agent, tool_provider=tool_provider)
+    event_processor_registry = EventProcessorRegistry(
+        initial_processors={
+            MessageEvent: {MessageEventProcessor(agent=agent, tool_provider=tool_provider)}
+        }
+    )
+
+    processor = EventLoopProcessor(
+        event_loop=queue, 
+        event_processor_registry=event_processor_registry
+    )
 
     conversation: list[ChatMessage] = [
         UserMessage(role="user", content=TextMessageContent(text="whats 23897 + 98234? i want precise answer, not an approximation")),
     ]
-    event = Event(type="chat", data=conversation)
+    event = MessageEvent(type="chat", data=conversation)
 
     await queue.append(event)
-    next_event = await queue.pop()
-    await processor.process(next_event)
+    while next_event := await queue.pop():
+        print(f"Next event: {next_event}")
+        await processor.process(next_event)
 
     response = next_event.data[-1]
     content = response.content
 
-    if isinstance(content, TextMessageContent):
-        print(content.text)
-    elif isinstance(content, ToolCallMessageContent):
-        print(content.output)
-    elif isinstance(content, ImageMessageContent):
-        print("[assistant returned an image payload]")
-    else:
-        print("[assistant returned unknown content]")
-
+    print(content)
 
 def main() -> None:
     try:

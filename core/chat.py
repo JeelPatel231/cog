@@ -1,16 +1,13 @@
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 from pydantic import BaseModel
 
 class TextMessageContent(BaseModel):
     text: str
 
-class ToolCallMessageContent(BaseModel):
-    output: str
-
 class ImageMessageContent(BaseModel):
     base64: str
 
-MessageContent = TextMessageContent | ToolCallMessageContent | ImageMessageContent
+MessageContent = TextMessageContent | ImageMessageContent
 
 class UserMessage(BaseModel):
     role: Literal['user']
@@ -19,6 +16,7 @@ class UserMessage(BaseModel):
 class AssistantMessage(BaseModel):
     role: Literal['assistant']
     content: MessageContent
+    tool_calls: list[tuple[str, dict[str, Any]]] = []
 
 class ToolResponseMessage(BaseModel):
     role: Literal['tool_call']

@@ -11,7 +11,7 @@ from core.chat import (
     ChatProtocol,
     ImageMessageContent,
     TextMessageContent,
-    ToolCallMessageContent,
+    ToolResponseMessage,
     UserMessage,
 )
 from core.tool_provider import ToolProvider
@@ -93,6 +93,7 @@ class OpenRouterChat(ChatProtocol):
 
         choice = completion.choices[0].message
 
+        tool_calls = []
         if choice.tool_calls:
             tool_calls = [
                 {
@@ -103,26 +104,35 @@ class OpenRouterChat(ChatProtocol):
                 }
                 for tool_call in choice.tool_calls
             ]
-            return AssistantMessage(
-                role="assistant",
-                content=ToolCallMessageContent(output=json.dumps(tool_calls)),
-            )
+        
+        # mapping hack
+        tool_calls = [
+            (tool_call["name"], json.loads(tool_call["arguments"]))
+            for tool_call in tool_calls
+        ]
+        
+        print(f"Received response from OpenRouter: {choice.content}, tool_calls: {tool_calls}")
 
         return AssistantMessage(
             role="assistant",
             content=TextMessageContent(text=self._extract_text(choice.content)),
+            tool_calls=tool_calls,
         )
 
     def _to_openrouter_message(self, message: ChatMessage) -> dict[str, Any]:
-        role = "user" if isinstance(message, UserMessage) else "assistant"
+        if isinstance(message, AssistantMessage):
+            role = "assistant"
+        elif isinstance(message, UserMessage):
+            role = "user"
+        elif isinstance(message, ToolResponseMessage):
+            role = "tool"
+        else:
+            raise ValueError(f"Unsupported message role: {message.role}")
         content = message.content
 
         if isinstance(content, TextMessageContent):
             return {"role": role, "content": content.text}
-
-        if isinstance(content, ToolCallMessageContent):
-            return {"role": role, "content": content.output}
-
+        
         if isinstance(content, ImageMessageContent):
             return {
                 "role": role,

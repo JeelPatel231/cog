@@ -35,8 +35,8 @@ class ToolRegistry(Protocol):
 
 
 class InMemoryToolRegistry:
-	def __init__(self):
-		self._tools: dict[str, Tool] = {}
+	def __init__(self, initial_tools: list[Tool] = []):
+		self._tools: dict[str, Tool] = {tool.name: tool for tool in initial_tools}
 
 	async def register_tool(self, tool: Tool) -> None:
 		self._tools[tool.name] = tool
@@ -55,6 +55,9 @@ class ToolProvider:
 	def __init__(self, tool_registry: ToolRegistry):
 		self._tool_registry = tool_registry
 
+
+  # this should be factored out as this class is only for providing tool definitions, not executing them. 
+	# The execution should be handled by a separate class that takes in the tool registry as a dependency.
 	async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolResult:
 		tool = await self._tool_registry.get_tool(tool_name)
 		input_model = ToolDefinitionExtractor.input_model(tool)
