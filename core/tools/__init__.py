@@ -3,9 +3,8 @@ from typing import Callable
 from pydantic import BaseModel
 
 
-class ToolResult:
-    def __init__(self, output: str):
-        self.output = output
+class ToolResult(BaseModel):
+    output: str
 
 
 class Tool[TIn: BaseModel](BaseModel):

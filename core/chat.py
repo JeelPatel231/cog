@@ -1,6 +1,11 @@
 from typing import Any, Literal, Protocol
 from pydantic import BaseModel
 
+class ToolCall(BaseModel):
+    name: str
+    arguments: dict[str, Any]
+    id: str
+
 class TextMessageContent(BaseModel):
     text: str
 
@@ -16,10 +21,12 @@ class UserMessage(BaseModel):
 class AssistantMessage(BaseModel):
     role: Literal['assistant']
     content: MessageContent
-    tool_calls: list[tuple[str, dict[str, Any]]] = []
+    tool_calls: list[ToolCall] = []
 
 class ToolResponseMessage(BaseModel):
-    role: Literal['tool_call']
+    role: Literal['tool']
+    id: str
+    name: str
     content: MessageContent
 
 ChatMessage = UserMessage | AssistantMessage | ToolResponseMessage

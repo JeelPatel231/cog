@@ -25,7 +25,7 @@ async def run_once() -> None:
     tool_registry = InMemoryToolRegistry(initial_tools=[AdditionTool])
     tool_provider = ToolProvider(tool_registry)
 
-    agent = OpenRouterChat(tool_provider=tool_provider)
+    agent = OpenRouterChat(tool_provider=tool_provider, model="gpt-4o-mini")
     event_processor_registry = EventProcessorRegistry(
         initial_processors={
             MessageEvent: {MessageEventProcessor(agent=agent, tool_provider=tool_provider)}
@@ -38,7 +38,7 @@ async def run_once() -> None:
     )
 
     conversation: list[ChatMessage] = [
-        UserMessage(role="user", content=TextMessageContent(text="whats 23897 + 98234? i want precise answer, not an approximation")),
+        UserMessage(role="user", content=TextMessageContent(text="whats 23897 + 983412 i want precise answer, not an approximation. make sure to use tools."))
     ]
     event = MessageEvent(type="chat", data=conversation)
 
@@ -52,18 +52,5 @@ async def run_once() -> None:
 
     print(content)
 
-def main() -> None:
-    try:
-        asyncio.run(run_once())
-    except ValueError as error:
-        if "OPENROUTER_API_KEY" in str(error):
-            print("OPENROUTER_API_KEY is required to run this example.")
-            return
-        raise
-    except RuntimeError as error:
-        print(f"Run failed: {error}")
-        return
-
-
 if __name__ == "__main__":
-    main()
+    asyncio.run(run_once())

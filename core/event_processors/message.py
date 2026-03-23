@@ -27,19 +27,19 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, MessageEvent]):
         if isinstance(last_message, AssistantMessage) and last_message.tool_calls:
                 # if the last message is an assistant message with a tool call, we can process the tool call and get the output
 
-                string_results = []
-
-                for tool_name, tool_args in last_message.tool_calls:
-                    tool_output = await self.tool_registry.call_tool(tool_name, tool_args)
+                for tool in last_message.tool_calls:
+                    tool_output = await self.tool_registry.call_tool(tool.name, tool.arguments)
                     # create a new assistant message with the tool output and append it to the conversation
-                    string_results.append(tool_output.output)
                     # return a new MessageEvent with the updated conversation
                 
-                conversation.append(ToolResponseMessage(
-                     role="tool_call", 
-                     content=TextMessageContent(
-                        text="\n".join(string_results)
-                     ))
+                    conversation.append(ToolResponseMessage(
+                        role="tool", 
+                        id=tool.id,
+                        name=tool.name,
+                        content=TextMessageContent(
+                            text=tool_output.model_dump_json()
+                        )
+                    )
                 )
 
                 return MessageEvent(type="chat", data=conversation)

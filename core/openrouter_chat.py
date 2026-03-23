@@ -11,6 +11,7 @@ from core.chat import (
     ChatProtocol,
     ImageMessageContent,
     TextMessageContent,
+    ToolCall,
     ToolResponseMessage,
     UserMessage,
 )
@@ -44,6 +45,7 @@ class OpenRouterChat(ChatProtocol):
 
     async def send_message(self, message: list[ChatMessage]) -> AssistantMessage:
         mapped_messages: list[Any] = [self._to_openrouter_message(m) for m in message]
+        print(f"Sending message to OpenRouter: {mapped_messages}")
         request_tools: list[dict[str, Any]] = []
 
         if self._tool_provider is not None:
@@ -96,20 +98,13 @@ class OpenRouterChat(ChatProtocol):
         tool_calls = []
         if choice.tool_calls:
             tool_calls = [
-                {
-                    "id": tool_call.id,
-                    "type": tool_call.type,
-                    "name": getattr(getattr(tool_call, "function", None), "name", ""),
-                    "arguments": getattr(getattr(tool_call, "function", None), "arguments", ""),
-                }
+                ToolCall(
+                    id=tool_call.id,
+                    name=getattr(getattr(tool_call, "function", None), "name", ""),
+                    arguments=json.loads(getattr(getattr(tool_call, "function", None), "arguments", "{}")),
+                )
                 for tool_call in choice.tool_calls
             ]
-        
-        # mapping hack
-        tool_calls = [
-            (tool_call["name"], json.loads(tool_call["arguments"]))
-            for tool_call in tool_calls
-        ]
         
         print(f"Received response from OpenRouter: {choice.content}, tool_calls: {tool_calls}")
 
@@ -122,19 +117,22 @@ class OpenRouterChat(ChatProtocol):
     def _to_openrouter_message(self, message: ChatMessage) -> dict[str, Any]:
         if isinstance(message, AssistantMessage):
             role = "assistant"
-        elif isinstance(message, UserMessage):
-            role = "user"
-        elif isinstance(message, ToolResponseMessage):
-            role = "tool"
-        else:
-            raise ValueError(f"Unsupported message role: {message.role}")
-        content = message.content
+            content = message.content
+            if isinstance(content, TextMessageContent):
+                return {"role": role, "content": content.text, "tool_calls": [
+                    {
+                        "id": tool_call.id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_call.name,
+                            "arguments": json.dumps(tool_call.arguments),
+                        }
+                    }
+                    for tool_call in message.tool_calls
+                ]}
 
-        if isinstance(content, TextMessageContent):
-            return {"role": role, "content": content.text}
-        
-        if isinstance(content, ImageMessageContent):
-            return {
+            if isinstance(content, ImageMessageContent):
+                return {
                 "role": role,
                 "content": [
                     {
@@ -144,9 +142,43 @@ class OpenRouterChat(ChatProtocol):
                         },
                     }
                 ],
-            }
+            }       
+            raise ValueError(f"Unsupported content type for ToolResponseMessage: {type(content)!r}")
+            
+        elif isinstance(message, UserMessage):
+            role = "user"
+            content = message.content
+            if isinstance(content, TextMessageContent):
+                return {"role": role, "content": content.text}
 
-        raise ValueError(f"Unsupported message content type: {type(content)!r}")
+            if isinstance(content, ImageMessageContent):
+                return {
+                "role": role,
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{content.base64}",
+                        },
+                    }
+                ],
+            }       
+
+            raise ValueError(f"Unsupported content type for ToolResponseMessage: {type(content)!r}")
+
+        elif isinstance(message, ToolResponseMessage):
+            role = "tool"
+            content = message.content
+            if isinstance(content, TextMessageContent):
+                return {
+                    "role": role,
+                    "content": content.text,
+                    "tool_call_id": message.id,
+                    "name": message.name,
+                }
+            raise ValueError(f"Unsupported content type for ToolResponseMessage: {type(content)!r}")
+
+        raise ValueError(f"Unsupported message role: {message.role}")
 
     def _extract_text(self, content: Any) -> str:
         if content is None:
