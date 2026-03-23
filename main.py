@@ -14,7 +14,7 @@ from core.chat import (
     TextMessageContent,
     UserMessage,
 )
-from core.event_loop import Event, MessageEvent
+from core.event_loop import MessageEvent
 from core.in_memory_event_loop import InMemoryEventLoop
 from core.openrouter_chat import OpenRouterChat
 from core.processor import EventLoopProcessor
