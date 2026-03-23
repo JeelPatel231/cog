@@ -3,7 +3,9 @@ import asyncio
 from dotenv import load_dotenv
 
 from core.event_processors.message import MessageEventProcessor
+from core.history_transformer import PassthroughHistoryTransformer
 from core.processor_registry import EventProcessorRegistry
+
 load_dotenv()  # Load environment variables from .env file
 
 from core.chat import (
@@ -28,17 +30,27 @@ async def run_once() -> None:
     agent = OpenRouterChat(tool_provider=tool_provider, model="gpt-4o-mini")
     event_processor_registry = EventProcessorRegistry(
         initial_processors={
-            MessageEvent: {MessageEventProcessor(agent=agent, tool_provider=tool_provider)}
+            MessageEvent: {
+                MessageEventProcessor(
+                    agent=agent,
+                    tool_provider=tool_provider,
+                    history_transformer=PassthroughHistoryTransformer(),
+                )
+            }
         }
     )
 
     processor = EventLoopProcessor(
-        event_loop=queue, 
-        event_processor_registry=event_processor_registry
+        event_loop=queue, event_processor_registry=event_processor_registry
     )
 
     conversation: list[ChatMessage] = [
-        UserMessage(role="user", content=TextMessageContent(text="whats 23897 + 983412 i want precise answer, not an approximation. make sure to use tools."))
+        UserMessage(
+            role="user",
+            content=TextMessageContent(
+                text="whats 23897 + 983412 i want precise answer, not an approximation. make sure to use tools."
+            ),
+        )
     ]
     event = MessageEvent(type="chat", data=conversation)
 
@@ -51,6 +63,7 @@ async def run_once() -> None:
     content = response.content
 
     print(content)
+
 
 if __name__ == "__main__":
     asyncio.run(run_once())
