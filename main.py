@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 from core.event_processors.message import MessageEventProcessor
 from core.history_transformer import PassthroughHistoryTransformer
-from core.processor_registry import EventProcessorRegistry
+from core.event_loop.processor_registry import EventProcessorRegistry
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -14,12 +14,12 @@ from core.chat import (
     TextMessageContent,
     UserMessage,
 )
-from core.event_loop import MessageEvent
+from core.event_processors.message import MessageEvent
 from core.in_memory_event_loop import InMemoryEventLoop
 from core.openrouter_chat import OpenRouterChat
-from core.processor import EventLoopProcessor
+from core.event_loop.processor import EventLoopProcessor
 from core.tool_provider import InMemoryToolRegistry, ToolProvider
-from core.tools import AdditionTool
+from core.tools.math import AdditionTool
 
 
 async def run_once() -> None:
@@ -52,7 +52,7 @@ async def run_once() -> None:
             ),
         )
     ]
-    event = MessageEvent(type="chat", data=conversation)
+    event = MessageEvent(data=conversation)
 
     await queue.append(event)
     while next_event := await queue.pop():

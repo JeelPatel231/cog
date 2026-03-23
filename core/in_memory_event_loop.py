@@ -1,6 +1,7 @@
 import asyncio
 
-from core.event_loop import Event, EventLoop
+from core.event_loop.loop import EventLoop
+from core.event_loop import Event
 
 
 class InMemoryEventLoop(EventLoop):

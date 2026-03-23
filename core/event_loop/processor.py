@@ -1,8 +1,9 @@
 from core.chat import ChatProtocol
-from core.event_loop import EventLoop, Event
-from core.processor_registry import EventProcessorRegistry
 from core.tool_provider import ToolProvider
+from core.event_loop.processor_registry import EventProcessorRegistry
+from . import Event
 
+from .loop import EventLoop
 
 class EventLoopProcessor:
     def __init__(

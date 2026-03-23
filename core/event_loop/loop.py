@@ -1,13 +1,5 @@
-from typing import Protocol, Literal
-from pydantic import BaseModel
-
-from core.chat import ChatMessage
-
-class MessageEvent(BaseModel):
-    type: Literal["chat"] = "chat"
-    data: list[ChatMessage]
-
-Event = MessageEvent
+from typing import Protocol
+from . import Event
 
 class EventLoop(Protocol):
     """

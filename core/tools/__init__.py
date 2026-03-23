@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Awaitable, Callable
 
 from pydantic import BaseModel
 
@@ -10,9 +10,5 @@ class ToolResult(BaseModel):
 class Tool[TIn: BaseModel](BaseModel):
     name: str
     description: str
-    callback: Callable[[TIn], ToolResult]
+    callback: Callable[[TIn], Awaitable[ToolResult]]
 
-
-from .math import AdditionTool
-
-__all__ = ["Tool", "ToolResult", "AdditionTool"]

@@ -1,4 +1,4 @@
-from typing import Protocol
+from typing import Any, Protocol, Sequence
 
 from core.chat import ChatMessage, SystemMessage, TextMessageContent
 from core.skills import SkillRegistry
@@ -16,13 +16,13 @@ class HistoryTransformer(Protocol):
     The original history must never be mutated — always return a new list.
     """
 
-    def transform(self, history: list[ChatMessage]) -> list[ChatMessage]: ...
+    def transform(self, history: Sequence[Any]) -> list[ChatMessage]: ...
 
 
 class PassthroughHistoryTransformer:
     """Default no-op transformer — passes the full history through unchanged."""
 
-    def transform(self, history: list[ChatMessage]) -> list[ChatMessage]:
+    def transform(self, history: Sequence[ChatMessage]) -> list[ChatMessage]:
         return list(history)
 
 
@@ -40,7 +40,7 @@ class SkillMetadataTransformer:
     def __init__(self, skill_registry: SkillRegistry) -> None:
         self._registry = skill_registry
 
-    def transform(self, history: list[ChatMessage]) -> list[ChatMessage]:
+    def transform(self, history: Sequence[ChatMessage]) -> list[ChatMessage]:
         skills = self._registry.list_skills()
         if not skills:
             return list(history)

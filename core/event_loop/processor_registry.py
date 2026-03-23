@@ -1,10 +1,7 @@
 from collections import defaultdict
-from typing import Mapping, Protocol
-from .event_loop import Event
-
-
-class SingleEventProcessor[TIn : Event, TOut : Event](Protocol):
-    async def process(self, event: TIn) -> TOut|None: ...
+from typing import Mapping
+from core.event_loop.single_event_processor import SingleEventProcessor
+from . import Event
 
 
 from typing import Type
