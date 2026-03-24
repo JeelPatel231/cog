@@ -56,7 +56,6 @@ async def run_once() -> None:
 
     await queue.append(event)
     while next_event := await queue.pop():
-        print(f"Next event: {next_event}")
         await processor.process(next_event)
 
     response = next_event.data[-1]
