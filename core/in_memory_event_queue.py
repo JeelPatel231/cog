@@ -1,10 +1,10 @@
 import asyncio
 
-from core.event_loop.loop import EventLoop
+from core.event_loop.event_queue import EventQueue
 from core.event_loop import Event
 
 
-class InMemoryEventLoop(EventLoop):
+class InMemoryEventQueue(EventQueue):
     def __init__(self):
         self._queue: asyncio.Queue[Event] = asyncio.Queue()
 

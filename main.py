@@ -15,7 +15,7 @@ from core.chat import (
     UserMessage,
 )
 from core.event_processors.message import MessageEvent
-from core.in_memory_event_loop import InMemoryEventLoop
+from core.in_memory_event_queue import InMemoryEventQueue
 from core.openrouter_chat import OpenRouterChat
 from core.event_loop.processor import EventLoopProcessor
 from core.tool_provider import InMemoryToolRegistry, ToolProvider
@@ -23,7 +23,7 @@ from core.tools.math import AdditionTool
 
 
 async def run_once() -> None:
-    queue = InMemoryEventLoop()
+    queue = InMemoryEventQueue()
     tool_registry = InMemoryToolRegistry(initial_tools=[AdditionTool])
     tool_provider = ToolProvider(tool_registry)
 
