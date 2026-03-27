@@ -1,20 +1,20 @@
-from core.chat import ChatProtocol
-from core.tool_provider import ToolProvider
 from core.event_loop.processor_registry import EventProcessorRegistry
-from . import Event
+from . import Event, InputEvent, OutputEvent
 
 from .event_queue import EventQueue
 
 class EventLoopProcessor:
     def __init__(
         self,
-        event_loop: EventQueue,
+        input_event_queue: EventQueue[InputEvent],
+        output_event_queue: EventQueue[OutputEvent],
         event_processor_registry: EventProcessorRegistry,
     ):
-        self.event_loop = event_loop
+        self.input_event_queue = input_event_queue
+        self.output_event_queue = output_event_queue
         self.event_processors = event_processor_registry
 
-    async def process(self, event: Event):
+    async def start(self):
         """
         take an event from the loop. the event will be a serialized conversation containing user and assistant messages.
         the set of messages will be passed to the agent, which will return a response. the response will be appended to the conversation.
@@ -22,9 +22,23 @@ class EventLoopProcessor:
 
         the updated conversation should only be put back in the event loop if there are tool calls being made.
         """
-        event_type = event.__class__
-        processors = await self.event_processors.get_processors(event_type)
-        for processor in processors:
-            processed_event = await processor.process(event)
-            if processed_event is not None:
-                await self.event_loop.append(processed_event)
+        while True:
+            event = await self.input_event_queue.pop()
+            event_type = event.__class__
+            processors = await self.event_processors.get_processors(event_type)
+            for processor in processors:
+                coroutine = processor.process(event)
+                async for yielded_event in coroutine:
+                    assert isinstance(yielded_event, Event), f"Processor yielded an item that is not an Event: {yielded_event}"
+
+                    if isinstance(yielded_event, OutputEvent):
+                        # await self.output_event_queue.push(yielded_event)
+                        print(f"Output event produced: {yielded_event}")
+                        continue
+                    
+                    if isinstance(yielded_event, InputEvent):
+                        await self.input_event_queue.push(yielded_event)
+                        continue
+                    
+                    raise ValueError(f"Processor yielded an event of unsupported type: {type(yielded_event)}")
+                

@@ -10,17 +10,13 @@ from . import Tool, ToolResult
 class SubAgentInput(BaseModel):
     instruction: str
 
-async def call_subagent(event_loop: EventQueue, input: SubAgentInput) -> ToolResult:
-    await event_loop.append(
-        MessageEvent(data=[UserMessage(role="user", content=TextMessageContent(text=input.instruction))])
-    )
-    
+async def call_subagent(input: SubAgentInput) -> ToolResult:
     raise NotImplementedError("Awaiting sub-agent callback is not implemented")
 
 
-def SubAgentTool(event_loop: EventQueue) -> Tool[SubAgentInput]:
+def SubAgentTool() -> Tool[SubAgentInput]:
     return Tool[SubAgentInput](
         name="subagent",
         description="Delegate tasks to a sub-agent.",
-        callback=partial(call_subagent, event_loop=event_loop),
+        callback=call_subagent,
     )

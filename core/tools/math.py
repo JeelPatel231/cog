@@ -9,7 +9,6 @@ class AdditionInput(BaseModel):
     b: int
 
 async def add(input: AdditionInput) -> ToolResult:
-    await asyncio.sleep(10)  # simulate some processing time
     return ToolResult(output=str(input.a + input.b))
 
 AdditionTool = Tool[AdditionInput](

@@ -1,4 +1,4 @@
-from typing import Literal, Sequence
+from typing import AsyncIterator, Sequence
 
 from core.chat import (
     ChatMessage,
@@ -10,17 +10,19 @@ from core.chat import (
 )
 from core.history_transformer import HistoryTransformer
 from core.event_loop.processor_registry import SingleEventProcessor
-from core.event_loop import Event
+from core.event_loop import InputEvent, OutputEvent, Event
 from core.tool_provider import ToolProvider
 from dataclasses import dataclass
 import asyncio
 from asyncio import Task
-
+    
+@dataclass
+class MessageEvent(InputEvent):
+    data: Sequence[ChatMessage]
 
 @dataclass
-class MessageEvent(Event):
-    data: Sequence[ChatMessage | DeferredToolCallBatch]
-
+class ReplyToUser(OutputEvent):
+    data: AssistantMessage 
 
 @dataclass
 class DeferredToolCall:
@@ -29,12 +31,7 @@ class DeferredToolCall:
     task_handle: Task
 
 
-@dataclass
-class DeferredToolCallBatch:
-    handles: list[DeferredToolCall]
-
-
-class MessageEventProcessor(SingleEventProcessor[MessageEvent, MessageEvent]):
+class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
     def __init__(
         self,
         agent: ChatProtocol,
@@ -42,70 +39,46 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, MessageEvent]):
         history_transformer: HistoryTransformer,
     ) -> None:
         self.agent = agent
-        self.tool_registry = tool_provider
+        self.tool_provider = tool_provider
         self.history_transformer = history_transformer
-
-    async def process(self, event: MessageEvent) -> MessageEvent | None:
+    
+    async def process(self, event: MessageEvent) -> AsyncIterator[Event]:
         print(f"Processing message event: {event.data}")
         conversation = event.data
         assert conversation, "Conversation cannot be empty"
 
         last_message = conversation[-1]
 
-        # if last message is a user message, pass the conversation to the agent and get a response
-        if isinstance(last_message, UserMessage) or (
-            isinstance(last_message, ToolResponseMessage)
-        ):
-            model_history = self.history_transformer.transform(conversation)
-            response = await self.agent.send_message(model_history)
-            return MessageEvent(data=[*conversation, response])
+        assert not isinstance(
+            last_message, AssistantMessage 
+        ), "Last message must not be an AssistantMessage"
 
-        if isinstance(last_message, AssistantMessage) and last_message.tool_calls:
-            # if the last message is an assistant message with a tool call, we can process the tool call and get the output
+        model_history = self.history_transformer.transform(conversation)
+        response = await self.agent.send_message(model_history)
 
-            tool_calls = []
-            for tool in last_message.tool_calls:
-                tool_output = asyncio.create_task(
-                    self.tool_registry.call_tool(tool.name, tool.arguments)
-                )
+        tool_calls = response.tool_calls
+        
+        if not tool_calls:
+            # nothing to process. Just return the assistant message as is.
+            yield ReplyToUser(data=response)
+            return
 
-                tool_calls.append(
-                    DeferredToolCall(
-                        call_id=tool.id,
-                        name=tool.name,
-                        task_handle=tool_output,
-                    )
-                )
+        tool_result_futures = await asyncio.gather(
+            *[
+                self.tool_provider.call_tool(tool.name, tool.arguments)
+                for tool in tool_calls
+            ],
+        )
 
-            return MessageEvent(data=[*conversation, DeferredToolCallBatch(handles=tool_calls)])
+        tool_results = [
+            ToolResponseMessage(
+                role="tool",
+                id=tool.id,
+                name=tool.name,
+                content=TextMessageContent(text=result.output),
+            )
+            for tool, result in zip(tool_calls, tool_result_futures)
+        ]
 
-
-        if isinstance(last_message, DeferredToolCallBatch):
-            all_done = all(deferred_call.task_handle.done() for deferred_call in last_message.handles)
-            if not all_done:
-                await asyncio.sleep(1)  # wait a bit before checking again, to avoid busy waiting
-                # if not all tool calls are done, we can skip processing for now and check back later when the event is re-processed
-                return MessageEvent(data=conversation)
-            
-            
-            tool_results: list[ToolResponseMessage] = []
-            for deferred_call in last_message.handles:
-                try:
-                    result = deferred_call.task_handle.result()
-                    tool_results.append(ToolResponseMessage(
-                        role="tool",
-                        name=deferred_call.name,
-                        id=deferred_call.call_id,
-                        content=TextMessageContent(text=str(result.output)),
-                    ))
-                except Exception as e:
-                    tool_results.append(ToolResponseMessage(
-                        role="tool",
-                        name=deferred_call.name,
-                        id=deferred_call.call_id,
-                        content=TextMessageContent(text=f"Error executing tool: {e}"),
-                    ))
-
-            return MessageEvent(data=[*conversation[:-1], *tool_results])
-
-        return None
+        # add the conversation back to loop for next iteration.
+        yield MessageEvent(data=[*conversation, response, *tool_results])

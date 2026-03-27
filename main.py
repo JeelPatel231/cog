@@ -23,7 +23,8 @@ from core.tools.math import AdditionTool
 
 
 async def run_once() -> None:
-    queue = InMemoryEventQueue()
+    in_queue = InMemoryEventQueue()
+    out_queue = InMemoryEventQueue()
     tool_registry = InMemoryToolRegistry(initial_tools=[AdditionTool])
     tool_provider = ToolProvider(tool_registry)
 
@@ -41,7 +42,9 @@ async def run_once() -> None:
     )
 
     processor = EventLoopProcessor(
-        event_loop=queue, event_processor_registry=event_processor_registry
+        input_event_queue=in_queue,
+        output_event_queue=out_queue, 
+        event_processor_registry=event_processor_registry
     )
 
     conversation: list[ChatMessage] = [
@@ -53,15 +56,10 @@ async def run_once() -> None:
         )
     ]
     event = MessageEvent(data=conversation)
+    
+    await in_queue.push(event)
 
-    await queue.append(event)
-    while next_event := await queue.pop():
-        await processor.process(next_event)
-
-    response = next_event.data[-1]
-    content = response.content
-
-    print(content)
+    await processor.start()
 
 
 if __name__ == "__main__":

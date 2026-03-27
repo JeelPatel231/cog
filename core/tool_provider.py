@@ -62,7 +62,10 @@ class ToolProvider:
 		tool = await self._tool_registry.get_tool(tool_name)
 		input_model = ToolDefinitionExtractor.input_model(tool)
 		parsed_input = input_model.model_validate(arguments)
-		return await tool.callback(parsed_input)
+		try:
+			return await tool.callback(parsed_input)
+		except Exception as error:
+			return ToolResult(output=f"Error executing tool '{tool_name}': {error}")
 
 	async def get_tool_definitions(self) -> list[dict[str, Any]]:
 		all_tools = await self._tool_registry.list_tools()

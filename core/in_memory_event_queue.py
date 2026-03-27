@@ -8,7 +8,7 @@ class InMemoryEventQueue(EventQueue):
     def __init__(self):
         self._queue: asyncio.Queue[Event] = asyncio.Queue()
 
-    async def append(self, item: Event) -> None:
+    async def push(self, item: Event) -> None:
         await self._queue.put(item)
 
     async def pop(self) -> Event:
