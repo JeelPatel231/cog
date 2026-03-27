@@ -63,9 +63,10 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
 
             tool_calls = response.tool_calls
 
+            yield ReplyToUser(data=response)
+
             if not tool_calls:
-                # nothing to process. Just return the assistant message as is.
-                yield ReplyToUser(data=response)
+                # nothing to process.
                 return
 
             tool_result_futures = [

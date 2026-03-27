@@ -1,9 +1,11 @@
 import asyncio
 import json
 import os
-from typing import Any, cast
+from typing import Any, Optional, Type, cast
 
 from openrouter import OpenRouter
+from openrouter.components.responseformatjsonschema import ResponseFormatJSONSchemaTypedDict
+from pydantic import BaseModel
 
 from core.chat import (
     AssistantMessage,
@@ -44,7 +46,9 @@ class OpenRouterChat(ChatProtocol):
         self._max_retries = max_retries
         self._retry_delay_seconds = retry_delay_seconds
 
-    async def send_message(self, message: list[ChatMessage]) -> AssistantMessage:
+    async def send_message(
+        self, message: list[ChatMessage], *, response_format: Optional[Type[BaseModel]] = None
+    ) -> AssistantMessage:
         mapped_messages: list[Any] = [self._to_openrouter_message(m) for m in message]
         print(f"Sending message to OpenRouter: {mapped_messages}")
         request_tools: list[dict[str, Any]] = []
@@ -71,6 +75,19 @@ class OpenRouterChat(ChatProtocol):
         completion: Any = None
         last_error: Exception | None = None
 
+        response_format_dict: ResponseFormatJSONSchemaTypedDict | None = None
+        if response_format is not None:
+            response_format_dict = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_format.__name__,
+                    "schema_": response_format.model_json_schema(),
+                    "strict": True,
+                },
+            }
+
+        print(f"Request tools: {response_format_dict}, {request_tools}")
+
         for attempt in range(self._max_retries + 1):
             try:
                 completion = await self._client.chat.send_async(
@@ -78,18 +95,21 @@ class OpenRouterChat(ChatProtocol):
                     messages=mapped_messages,
                     tools=cast(Any, request_tools if request_tools else None),
                     stream=False,
+                    response_format=response_format_dict,
                 )
                 break
             except Exception as error:
                 last_error = error
-                status_code = getattr(error, "status_code", None) or getattr(error, "status", None)
+                status_code = getattr(error, "status_code", None) or getattr(
+                    error, "status", None
+                )
                 is_retryable = status_code is None or status_code >= 500
                 if not is_retryable or attempt >= self._max_retries:
                     raise RuntimeError(
                         f"OpenRouter request failed after {attempt + 1} attempt(s): {error}"
                     ) from error
 
-                await asyncio.sleep(self._retry_delay_seconds * (2 ** attempt))
+                await asyncio.sleep(self._retry_delay_seconds * (2**attempt))
 
         if completion is None and last_error is not None:
             raise RuntimeError(f"OpenRouter request failed: {last_error}")
@@ -102,12 +122,16 @@ class OpenRouterChat(ChatProtocol):
                 ToolCall(
                     id=tool_call.id,
                     name=getattr(getattr(tool_call, "function", None), "name", ""),
-                    arguments=json.loads(getattr(getattr(tool_call, "function", None), "arguments", "{}")),
+                    arguments=json.loads(
+                        getattr(getattr(tool_call, "function", None), "arguments", "{}")
+                    ),
                 )
                 for tool_call in choice.tool_calls
             ]
-        
-        print(f"Received response from OpenRouter: {choice.content}, tool_calls: {tool_calls}")
+
+        print(
+            f"Received response from OpenRouter: {choice.content}, tool_calls: {tool_calls}"
+        )
 
         return AssistantMessage(
             role="assistant",
@@ -120,32 +144,38 @@ class OpenRouterChat(ChatProtocol):
             role = "assistant"
             content = message.content
             if isinstance(content, TextMessageContent):
-                return {"role": role, "content": content.text, "tool_calls": [
-                    {
-                        "id": tool_call.id,
-                        "type": "function",
-                        "function": {
-                            "name": tool_call.name,
-                            "arguments": json.dumps(tool_call.arguments),
+                return {
+                    "role": role,
+                    "content": content.text,
+                    "tool_calls": [
+                        {
+                            "id": tool_call.id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_call.name,
+                                "arguments": json.dumps(tool_call.arguments),
+                            },
                         }
-                    }
-                    for tool_call in message.tool_calls
-                ]}
+                        for tool_call in message.tool_calls
+                    ],
+                }
 
             if isinstance(content, ImageMessageContent):
                 return {
-                "role": role,
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{content.base64}",
-                        },
-                    }
-                ],
-            }       
-            raise ValueError(f"Unsupported content type for ToolResponseMessage: {type(content)!r}")
-            
+                    "role": role,
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{content.base64}",
+                            },
+                        }
+                    ],
+                }
+            raise ValueError(
+                f"Unsupported content type for ToolResponseMessage: {type(content)!r}"
+            )
+
         elif isinstance(message, UserMessage):
             role = "user"
             content = message.content
@@ -154,18 +184,20 @@ class OpenRouterChat(ChatProtocol):
 
             if isinstance(content, ImageMessageContent):
                 return {
-                "role": role,
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{content.base64}",
-                        },
-                    }
-                ],
-            }       
+                    "role": role,
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{content.base64}",
+                            },
+                        }
+                    ],
+                }
 
-            raise ValueError(f"Unsupported content type for ToolResponseMessage: {type(content)!r}")
+            raise ValueError(
+                f"Unsupported content type for ToolResponseMessage: {type(content)!r}"
+            )
 
         elif isinstance(message, ToolResponseMessage):
             role = "tool"
@@ -177,13 +209,17 @@ class OpenRouterChat(ChatProtocol):
                     "tool_call_id": message.id,
                     "name": message.name,
                 }
-            raise ValueError(f"Unsupported content type for ToolResponseMessage: {type(content)!r}")
+            raise ValueError(
+                f"Unsupported content type for ToolResponseMessage: {type(content)!r}"
+            )
 
         elif isinstance(message, SystemMessage):
             content = message.content
             if isinstance(content, TextMessageContent):
                 return {"role": "system", "content": content.text}
-            raise ValueError(f"Unsupported content type for SystemMessage: {type(content)!r}")
+            raise ValueError(
+                f"Unsupported content type for SystemMessage: {type(content)!r}"
+            )
 
         raise ValueError(f"Unsupported message role: {message.role}")
 

@@ -1,4 +1,4 @@
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Optional, Protocol, Type
 from pydantic import BaseModel
 
 class ToolCall(BaseModel):
@@ -44,4 +44,4 @@ class ChatProtocol(Protocol):
     its the responsibility of this class to map the input messages to the format required by the underlying implementation, 
     and to map the output of the implementation back to an AssistantMessage.
     """
-    async def send_message(self, message: list[ChatMessage]) -> AssistantMessage: ...
+    async def send_message(self, message: list[ChatMessage], *, response_format: Optional[Type[BaseModel]] = None) -> AssistantMessage: ...

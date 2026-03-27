@@ -3,8 +3,10 @@ import asyncio
 from dotenv import load_dotenv
 
 from core.event_processors.message import MessageEventProcessor
+from core.event_processors.subagent import SubAgentEvent, SubagentEventProcessor
 from core.history_transformer import PassthroughHistoryTransformer
 from core.event_loop.processor_registry import EventProcessorRegistry
+from core.tools.subagent import SubAgentTool
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -25,7 +27,7 @@ from core.tools.math import AdditionTool
 async def run_once() -> None:
     in_queue = InMemoryEventQueue()
     out_queue = InMemoryEventQueue()
-    tool_registry = InMemoryToolRegistry(initial_tools=[AdditionTool])
+    tool_registry = InMemoryToolRegistry(initial_tools=[AdditionTool, SubAgentTool(in_queue)])
     tool_provider = ToolProvider(tool_registry)
 
     agent = OpenRouterChat(tool_provider=tool_provider, model="gpt-4o-mini")
@@ -37,7 +39,14 @@ async def run_once() -> None:
                     tool_provider=tool_provider,
                     history_transformer=PassthroughHistoryTransformer(),
                 )
-            }
+            },
+            SubAgentEvent: {
+                SubagentEventProcessor(
+                    agent=agent,
+                    tool_provider=tool_provider,
+                    history_transformer=PassthroughHistoryTransformer(),
+                )
+            },
         }
     )
 
@@ -51,10 +60,11 @@ async def run_once() -> None:
         UserMessage(
             role="user",
             content=TextMessageContent(
-                text="whats 23897 + 983412 i want precise answer, not an approximation. make sure to use tools."
+                text="whats 23897 + 983412? i want you to start a subagent to calculate the answer, and then report the answer back to me. ask the subagent to use the addition tool to calculate the answer."
             ),
         )
     ]
+
     event = MessageEvent(data=conversation)
     
     await in_queue.push(event)

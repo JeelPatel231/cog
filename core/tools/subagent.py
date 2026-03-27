@@ -17,24 +17,27 @@ class SubAgentInput(BaseModel):
     instruction: str
 
 
-async def call_subagent(input: SubAgentInput, queue: EventQueue[Any]) -> ToolResult:
-    fut = Future()
-    await queue.push(
-        SubAgentEvent(
-            data=[
-                UserMessage(
-                    role="user", content=TextMessageContent(text=input.instruction)
-                )
-            ],
-            handle=fut,
+def call_subagent(queue: EventQueue[Any]):
+    async def inner(input: SubAgentInput) -> ToolResult:
+        fut = Future[str]()
+        await queue.push(
+            SubAgentEvent(
+                data=[
+                    UserMessage(
+                        role="user", content=TextMessageContent(text=input.instruction)
+                    )
+                ],
+                handle=fut,
+            )
         )
-    )
-    return await fut
-
+        response = await fut
+        return ToolResult(output=response)
+    
+    return inner
 
 def SubAgentTool(queue: EventQueue[Any]) -> Tool[SubAgentInput]:
     return Tool[SubAgentInput](
         name="subagent",
         description="Delegate tasks to a sub-agent.",
-        callback=partial(call_subagent, queue=queue),
+        callback=call_subagent(queue), 
     )

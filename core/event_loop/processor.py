@@ -26,6 +26,11 @@ class EventLoopProcessor:
             event = await self.input_event_queue.pop()
             event_type = event.__class__
             processors = await self.event_processors.get_processors(event_type)
+            
+            if not processors:
+                print(f"No processors found for event type: {event_type}. Event: {event}")
+                continue
+        
             for processor in processors:
                 coroutine = processor.process(event)
                 async for yielded_event in coroutine:
