@@ -17,7 +17,7 @@ def make_load_skill_tool(registry: SkillRegistry) -> Tool[LoadSkillInput]:
     to load whichever skills it needs.
     """
 
-    def load_skill(input: LoadSkillInput) -> ToolResult:
+    async def load_skill(input: LoadSkillInput) -> ToolResult:
         skill = registry.get_skill(input.skill_name)
         skill_md: Path = skill.skill_dir / "SKILL.md"
         if not skill_md.exists():
