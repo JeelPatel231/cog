@@ -24,7 +24,7 @@ class MessageEvent(InputEvent):
 
 @dataclass
 class ReplyToUser(OutputEvent):
-    data: AssistantMessage
+    data: str
 
 
 @dataclass
@@ -51,19 +51,23 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
         self.history_transformer = history_transformer
 
     async def process(self, event: MessageEvent) -> AsyncIterator[Event]:
-        print(f"Processing message event: {event.data}")
         conversation = event.data
         assert conversation, "Conversation cannot be empty"
 
         last_message = conversation[-1]
 
         if isinstance(last_message, (UserMessage, ToolResponseMessage)):
+            print(f"User/Tool message received: {last_message}")
+
             model_history = self.history_transformer.transform(conversation)
             response = await self.agent.send_message(model_history)
 
             tool_calls = response.tool_calls
+            
+            assert isinstance(response.content, TextMessageContent), "Expected TextMessageContent in response"
 
-            yield ReplyToUser(data=response)
+            if response.content.text:
+                yield ReplyToUser(data=response.content.text)
 
             if not tool_calls:
                 # nothing to process.
@@ -118,3 +122,10 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
             return
 
         raise ValueError(f"Unsupported message type: {type(last_message)}")
+
+    
+class UserReplyEventProcessor(SingleEventProcessor[ReplyToUser, Event]):
+   async def process(self, event: ReplyToUser) -> AsyncIterator[None]:
+        if False: yield
+        print(f"Assistant: {event.data}")
+        return

@@ -22,8 +22,8 @@ from core.tool_provider import ToolProvider
 
 
 @dataclass
-class ReplyToUser(OutputEvent):
-    data: AssistantMessage
+class SubAgentThinkingOutput(OutputEvent):
+    data: str
 
 
 @dataclass
@@ -64,7 +64,6 @@ class SubagentEventProcessor(SingleEventProcessor[SubAgentEvent, Event]):
 
     
     async def process(self, event: SubAgentEvent) -> AsyncIterator[Event]:
-        print(f"Processing message event: {event.data}")
         conversation = event.data
         assert conversation, "Conversation cannot be empty"
 
@@ -92,6 +91,9 @@ class SubagentEventProcessor(SingleEventProcessor[SubAgentEvent, Event]):
                 for tool, result in zip(tool_calls, outputs)
             ]
 
+            for tool_result in tool_results:
+                print(f"Tool '{tool_result.name}' returned: {tool_result.content.text}")
+
             # add the conversation back to loop for next iteration.
             yield SubAgentEvent(handle=event.handle, data=[*conversation[:-1], *tool_results])
             return
@@ -106,14 +108,15 @@ class SubagentEventProcessor(SingleEventProcessor[SubAgentEvent, Event]):
         if response.content.text:
             parsed_response = SubAgentResponseFormat.model_validate_json(response.content.text)
             completed = parsed_response.completed
+
+            if parsed_response.output:
+                yield SubAgentThinkingOutput(data=parsed_response.output)
             
             if completed:
                 event.handle.set_result(parsed_response.output)
                 return
 
         tool_calls = response.tool_calls
-
-        yield ReplyToUser(data=response)
 
         if not tool_calls:
             # nothing to process.
@@ -142,3 +145,10 @@ class SubagentEventProcessor(SingleEventProcessor[SubAgentEvent, Event]):
 
 
         raise ValueError(f"Unsupported message type: {type(last_message)}")
+
+class SubAgentThinkingEventProcessor(SingleEventProcessor[SubAgentThinkingOutput, Event]):
+    async def process(self, event: SubAgentThinkingOutput) -> AsyncIterator[None]:
+        if False: yield
+
+        print(f"SubAgent Output: {event.data}")
+        return

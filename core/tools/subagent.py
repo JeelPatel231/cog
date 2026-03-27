@@ -20,6 +20,7 @@ class SubAgentInput(BaseModel):
 def call_subagent(queue: EventQueue[Any]):
     async def inner(input: SubAgentInput) -> ToolResult:
         fut = Future[str]()
+        print(f"Calling sub-agent with instruction: {input.instruction}")
         await queue.push(
             SubAgentEvent(
                 data=[

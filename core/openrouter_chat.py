@@ -50,7 +50,6 @@ class OpenRouterChat(ChatProtocol):
         self, message: list[ChatMessage], *, response_format: Optional[Type[BaseModel]] = None
     ) -> AssistantMessage:
         mapped_messages: list[Any] = [self._to_openrouter_message(m) for m in message]
-        print(f"Sending message to OpenRouter: {mapped_messages}")
         request_tools: list[dict[str, Any]] = []
 
         if self._tool_provider is not None:
@@ -85,8 +84,6 @@ class OpenRouterChat(ChatProtocol):
                     "strict": True,
                 },
             }
-
-        print(f"Request tools: {response_format_dict}, {request_tools}")
 
         for attempt in range(self._max_retries + 1):
             try:
@@ -128,10 +125,6 @@ class OpenRouterChat(ChatProtocol):
                 )
                 for tool_call in choice.tool_calls
             ]
-
-        print(
-            f"Received response from OpenRouter: {choice.content}, tool_calls: {tool_calls}"
-        )
 
         return AssistantMessage(
             role="assistant",
