@@ -15,20 +15,28 @@ from core.tool_provider import ToolProvider
 from dataclasses import dataclass
 import asyncio
 from asyncio import Task
-    
+
+
 @dataclass
 class MessageEvent(InputEvent):
-    data: Sequence[ChatMessage]
+    data: Sequence[ChatMessage | DeferredToolCallBatch]
+
 
 @dataclass
 class ReplyToUser(OutputEvent):
-    data: AssistantMessage 
+    data: AssistantMessage
+
 
 @dataclass
 class DeferredToolCall:
     call_id: str
     name: str
     task_handle: Task
+
+
+@dataclass
+class DeferredToolCallBatch:
+    calls: Sequence[DeferredToolCall]
 
 
 class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
@@ -41,7 +49,7 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
         self.agent = agent
         self.tool_provider = tool_provider
         self.history_transformer = history_transformer
-    
+
     async def process(self, event: MessageEvent) -> AsyncIterator[Event]:
         print(f"Processing message event: {event.data}")
         conversation = event.data
@@ -49,36 +57,63 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
 
         last_message = conversation[-1]
 
-        assert not isinstance(
-            last_message, AssistantMessage 
-        ), "Last message must not be an AssistantMessage"
+        if isinstance(last_message, (UserMessage, ToolResponseMessage)):
+            model_history = self.history_transformer.transform(conversation)
+            response = await self.agent.send_message(model_history)
 
-        model_history = self.history_transformer.transform(conversation)
-        response = await self.agent.send_message(model_history)
+            tool_calls = response.tool_calls
 
-        tool_calls = response.tool_calls
-        
-        if not tool_calls:
-            # nothing to process. Just return the assistant message as is.
-            yield ReplyToUser(data=response)
+            if not tool_calls:
+                # nothing to process. Just return the assistant message as is.
+                yield ReplyToUser(data=response)
+                return
+
+            tool_result_futures = [
+                asyncio.create_task(
+                    self.tool_provider.call_tool(tool.name, tool.arguments)
+                )
+                for tool in tool_calls
+            ]
+
+            if tool_result_futures:
+                deferred_calls = DeferredToolCallBatch(
+                    calls=[
+                        DeferredToolCall(
+                            call_id=tool_call.id,
+                            name=tool_call.name,
+                            task_handle=task,
+                        )
+                        for tool_call, task in zip(tool_calls, tool_result_futures)
+                    ]
+                )
+                yield MessageEvent(data=[*conversation, response, deferred_calls])
+                return
+
+
+        if isinstance(last_message, DeferredToolCallBatch):
+            await asyncio.sleep(1)
+            tool_calls = last_message.calls
+            all_done = any(call.task_handle.done() for call in tool_calls)
+
+            if not all_done:
+                # if none of the tool calls are done, we can skip processing for now.
+                yield event
+                return
+
+            outputs = [call.task_handle.result() for call in tool_calls]
+
+            tool_results = [
+                ToolResponseMessage(
+                    role="tool",
+                    id=tool.call_id,
+                    name=tool.name,
+                    content=TextMessageContent(text=result.output),
+                )
+                for tool, result in zip(tool_calls, outputs)
+            ]
+
+            # add the conversation back to loop for next iteration.
+            yield MessageEvent(data=[*conversation[:-1], *tool_results])
             return
 
-        tool_result_futures = await asyncio.gather(
-            *[
-                self.tool_provider.call_tool(tool.name, tool.arguments)
-                for tool in tool_calls
-            ],
-        )
-
-        tool_results = [
-            ToolResponseMessage(
-                role="tool",
-                id=tool.id,
-                name=tool.name,
-                content=TextMessageContent(text=result.output),
-            )
-            for tool, result in zip(tool_calls, tool_result_futures)
-        ]
-
-        # add the conversation back to loop for next iteration.
-        yield MessageEvent(data=[*conversation, response, *tool_results])
+        raise ValueError(f"Unsupported message type: {type(last_message)}")
