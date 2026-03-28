@@ -3,17 +3,17 @@ from asyncio import Future
 from typing import Any
 
 from pydantic import BaseModel
-from functools import partial
 
 from core.chat import TextMessageContent, UserMessage
 from core.event_loop.event_queue import EventQueue
 from core.event_processors.message import MessageEvent
 from core.event_processors.subagent import SubAgentEvent
+from core.tools.utils.pydantic_adapter import PydanticToolArgs
 
 from . import Tool, ToolResult
 
 
-class SubAgentInput(BaseModel):
+class SubAgentInput(PydanticToolArgs):
     instruction: str
 
 

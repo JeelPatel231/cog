@@ -1,4 +1,5 @@
-from typing import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Protocol, Self, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -7,9 +8,14 @@ from pydantic import BaseModel
 class ToolResult(BaseModel):
     output: str
 
+@runtime_checkable
+class ToolArgs(Protocol):
+    def tool_json_schema(self) -> dict[str, Any]: ...
+    def tool_validate(self, arguments: dict[str, Any]) -> Self: ...
 
-class Tool[TIn: BaseModel](BaseModel):
+@dataclass(frozen=True)
+class Tool[T: ToolArgs]:
     name: str
     description: str
-    callback: Callable[[TIn], Awaitable[ToolResult]]
+    callback: Callable[[T], Awaitable[ToolResult]]
 

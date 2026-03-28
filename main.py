@@ -17,6 +17,7 @@ from core.event_processors.subagent import (
 from core.history_transformer import PassthroughHistoryTransformer
 from core.event_loop.processor_registry import EventProcessorRegistry
 from core.skills import Skill, SkillRegistry
+from core.tools.mcp_adapter import McpToolAdapterImpl
 from core.tools.skill_loader import SkillLoaderTool, SkillRunnerTool
 from core.tools.subagent import SubAgentTool
 
@@ -39,6 +40,10 @@ from core.tools.math import AdditionTool
 async def run_once() -> None:
     queue = InMemoryEventQueue()
     skill_registry = SkillRegistry()
+    mcp_adapter = McpToolAdapterImpl(mcp_url="http://localhost:3001/mcp")
+
+    mcp_tools = await mcp_adapter.get_tools()
+    
 
     skill_registry.register(skill=Skill(
         name="math",
@@ -51,7 +56,7 @@ async def run_once() -> None:
             SubAgentTool(queue),
             SkillLoaderTool(skill_registry),
             SkillRunnerTool(skill_registry),
-        ]
+        ] + mcp_tools 
     )
     tool_provider = ToolProvider(tool_registry)
     agent = OpenRouterChat(tool_provider=tool_provider, model="gpt-4o-mini")
@@ -90,7 +95,7 @@ async def run_once() -> None:
         event_queue=queue, event_processor_registry=event_processor_registry
     )
 
-    instruction = "whats 23897 + 983412? delegate the task to a sub-agent and ask it to use the skill loader tool to load math skill for precise calculations."
+    instruction = "what are the currently available tools you can use to help me?"
 
     conversation: list[ChatMessage] = [
         UserMessage(

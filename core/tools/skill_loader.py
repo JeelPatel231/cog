@@ -5,9 +5,10 @@ from pydantic import BaseModel
 
 from core.skills import SkillRegistry
 from core.tools import Tool, ToolResult
+from core.tools.utils.pydantic_adapter import PydanticToolArgs
 
 
-class LoadSkillInput(BaseModel):
+class LoadSkillInput(PydanticToolArgs):
     skill_name: str
 
 
@@ -41,13 +42,15 @@ def SkillLoaderTool(skill_registry: SkillRegistry) -> Tool[LoadSkillInput]:
         callback=make_load_skill_tool(skill_registry),
     )
 
-class RunSkillInput(BaseModel): 
+
+class RunSkillInput(PydanticToolArgs):
     skill_name: str
     script_name: str
     args: list[str] = []
 
-def SkillRunnerTool(skill_registry: SkillRegistry) -> Tool:
-    async def run_skill(skill_args: RunSkillInput) -> ToolResult:
+
+def run_skill_tool(skill_registry: SkillRegistry):
+    async def _inner(skill_args: RunSkillInput) -> ToolResult:
 
         print(f"Running skill with args: {skill_args}")
 
@@ -57,25 +60,35 @@ def SkillRunnerTool(skill_registry: SkillRegistry) -> Tool:
 
         skill = skill_registry.get_skill(skill_name)
 
-        skill_script_dir = (skill.skill_dir / "scripts")
+        skill_script_dir = skill.skill_dir / "scripts"
 
         if not skill_script_dir.exists() or not skill_script_dir.is_dir():
-            raise FileNotFoundError(f"Scripts directory not found for skill {skill_name!r} at {skill_script_dir}")
+            raise FileNotFoundError(
+                f"Scripts directory not found for skill {skill_name!r} at {skill_script_dir}"
+            )
 
         script_path = skill_script_dir / script_name
 
         if not script_path.exists() or not script_path.is_file():
-            raise FileNotFoundError(f"Script {script_name!r} not found for skill {skill_name!r} at {script_path}")
-        
-        out = subprocess.check_output(['bash', str(script_path)] + args)  # This will raise an error if the script fails
+            raise FileNotFoundError(
+                f"Script {script_name!r} not found for skill {skill_name!r} at {script_path}"
+            )
+
+        out = subprocess.check_output(
+            ["bash", str(script_path)] + args
+        )  # This will raise an error if the script fails
 
         return ToolResult(output=f"Output of {script_name}:\n{out.decode()}")
 
+    return _inner
+
+
+def SkillRunnerTool(skill_registry: SkillRegistry) -> Tool:
     return Tool(
         name="run_skill",
         description=(
             "Execute a named skill that has been loaded. "
             "The input should include the 'skill_name', 'script_name', and any other parameters required by the skill."
         ),
-        callback=run_skill,
+        callback=run_skill_tool(skill_registry),
     )

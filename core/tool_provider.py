@@ -4,87 +4,95 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel
 
-from core.tools import Tool, ToolResult
+from core.tools import Tool, ToolArgs, ToolResult
 
 
 class ToolDefinitionExtractor:
-	@staticmethod
-	def input_model(tool: Tool) -> type[BaseModel]:
-		func_params = signature(tool.callback).parameters
-		if len(func_params) != 1:
-			raise ValueError("Tool callback must have exactly one parameter")
+    @staticmethod
+    def input_model(tool: Tool) -> ToolArgs:
+        func_params = signature(tool.callback).parameters
+        if len(func_params) != 1:
+            raise ValueError("Tool callback must have exactly one parameter")
 
-		input_param = next(iter(func_params.values()))
-		input_class = input_param.annotation
-		if not isinstance(input_class, type) or not issubclass(input_class, BaseModel):
-			raise ValueError("Tool callback parameter must be a Pydantic model")
+        input_param = next(iter(func_params.values()))
+        input_class = input_param.annotation
+        print(f"Extracted input class {input_class} for tool '{tool.name}'")
+        if not isinstance(input_class, type) or not isinstance(input_class, ToolArgs):
+            raise ValueError(
+                "Tool callback parameter must adhere to the ToolArgs protocol and be a class"
+            )
 
-		return input_class
+        return input_class
 
-	@staticmethod
-	def input_schema[TIn: BaseModel](tool: Tool[TIn]) -> dict[str, Any]:
-		return ToolDefinitionExtractor.input_model(tool).model_json_schema()
+    @staticmethod
+    def input_schema(tool: Tool) -> dict[str, Any]:
+        return ToolDefinitionExtractor.input_model(tool).tool_json_schema()
 
 
 class ToolRegistry(Protocol):
-	async def register_tool(self, tool: Tool) -> None: ...
+    async def register_tool(self, tool: Tool) -> None: ...
 
-	async def get_tool(self, tool_name: str) -> Tool: ...
+    async def get_tool(self, tool_name: str) -> Tool: ...
 
-	async def list_tools(self) -> list[Tool]: ...
+    async def list_tools(self) -> list[Tool]: ...
 
 
 class InMemoryToolRegistry:
-	def __init__(self, initial_tools: list[Tool] = []):
-		self._tools: dict[str, Tool] = {tool.name: tool for tool in initial_tools}
+    def __init__(self, initial_tools: list[Tool] = []):
+        self._tools: dict[str, Tool] = {tool.name: tool for tool in initial_tools}
 
-	async def register_tool(self, tool: Tool) -> None:
-		self._tools[tool.name] = tool
+    async def register_tool(self, tool: Tool) -> None:
+        self._tools[tool.name] = tool
 
-	async def get_tool(self, tool_name: str) -> Tool:
-		try:
-			return self._tools[tool_name]
-		except KeyError as error:
-			raise ValueError(f"Tool not found: {tool_name}") from error
+    async def get_tool(self, tool_name: str) -> Tool:
+        try:
+            return self._tools[tool_name]
+        except KeyError as error:
+            raise ValueError(f"Tool not found: {tool_name}") from error
 
-	async def list_tools(self) -> list[Tool]:
-		return list(self._tools.values())
+    async def list_tools(self) -> list[Tool]:
+        return list(self._tools.values())
 
 
 class ToolProvider:
-	def __init__(self, tool_registry: ToolRegistry):
-		self._tool_registry = tool_registry
+    def __init__(self, tool_registry: ToolRegistry):
+        self._tool_registry = tool_registry
 
+        # this should be factored out as this class is only for providing tool definitions, not executing them.
 
-  # this should be factored out as this class is only for providing tool definitions, not executing them. 
-	# The execution should be handled by a separate class that takes in the tool registry as a dependency.
-	async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolResult:
-		tool = await self._tool_registry.get_tool(tool_name)
-		input_model = ToolDefinitionExtractor.input_model(tool)
-		parsed_input = input_model.model_validate(arguments)
-		try:
-			return await tool.callback(parsed_input)
-		except Exception as error:
-			return ToolResult(output=f"Error executing tool '{tool_name}': {error}")
+    # The execution should be handled by a separate class that takes in the tool registry as a dependency.
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolResult:
+        tool = await self._tool_registry.get_tool(tool_name)
+        input_model = ToolDefinitionExtractor.input_model(tool)
+        parsed_input = input_model.tool_validate(arguments)
+        try:
+            return await tool.callback(parsed_input)
+        except Exception as error:
+            return ToolResult(output=f"Error executing tool '{tool_name}': {error}")
 
-	async def get_tool_definitions(self) -> list[dict[str, Any]]:
-		all_tools = await self._tool_registry.list_tools()
-		return [
-			{
-				"name": tool.name,
-				"description": tool.description,
-				"input_schema": ToolDefinitionExtractor.input_schema(tool),
-			}
-			for tool in all_tools
-		]
+    async def get_tool_definitions(self) -> list[dict[str, Any]]:
+        all_tools = await self._tool_registry.list_tools()
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": ToolDefinitionExtractor.input_schema(tool),
+            }
+            for tool in all_tools
+        ]
 
-	async def get_system_prompt(self) -> str:
-		definitions = await self.get_tool_definitions()
-		return (
-			"You can use the following tools. "
-			"When needed, call them with valid JSON arguments that match the input schema.\n\n"
-			f"{json.dumps(definitions, indent=2)}"
-		)
+    async def get_system_prompt(self) -> str:
+        definitions = await self.get_tool_definitions()
+        only_info = [
+            {"name": definition["name"], "description": definition["description"]}
+            for definition in definitions
+        ]
+        return (
+            "You can use the following tools. "
+            "When needed, call them with valid JSON arguments that match the input schema.\n\n"
+            f"{json.dumps(only_info, indent=2)}"
+        )
+
 
 class ToolCallProcessor(Protocol):
     async def process_tool_call(self, raw_tool_calls: str) -> list[str]: ...
