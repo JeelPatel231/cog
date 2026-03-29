@@ -1,7 +1,7 @@
+import asyncio
 from dataclasses import dataclass
 import os
 from pathlib import Path
-import subprocess
 import sys
 from typing import Any, List
 
@@ -28,13 +28,20 @@ async def run(args: dict[str, Any] | None) -> ToolResult:
     if path.is_dir():
         raise ValueError("The path does not point to a script")
     
-    result = subprocess.run(
-        [str(path), *run.arguments],
-        capture_output=True,
-        text=True,
-        env={**os.environ}
+    process = await asyncio.create_subprocess_exec(
+        str(path),
+        *run.arguments,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env={**os.environ} # TODO: load .env files from skills as well
     )
-    run_result = RunResult(stdout=result.stdout, stderr=result.stderr, return_code=result.returncode)
+    stdout, stderr = await process.communicate()
+
+    run_result = RunResult(
+        stdout=stdout.decode(),
+        stderr=stderr.decode(),
+        return_code=process.returncode or 0
+    )
     return ToolResult(output=f"Return code: {run_result.return_code}\nSTDOUT:\n{run_result.stdout}\nSTDERR:\n{run_result.stderr}")
 
 RunTool = Tool(
