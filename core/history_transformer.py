@@ -1,7 +1,6 @@
 from typing import Any, Protocol, Sequence
 
-from core.chat import ChatMessage, SystemMessage, TextMessageContent
-from core.skills import SkillRegistry
+from core.chat import ChatMessage
 
 
 class HistoryTransformer(Protocol):

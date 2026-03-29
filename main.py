@@ -2,6 +2,7 @@ import asyncio
 
 from pathlib import Path
 from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file
 
 from core.event_processors.message import (
     MessageEventProcessor,
@@ -13,12 +14,12 @@ from core.event_processors.subagent import (
 )
 from core.history_transformer import PassthroughHistoryTransformer
 from core.event_loop.processor_registry import EventProcessorRegistry
-from core.skills import Skill, SkillRegistry
 from core.tools.mcp_adapter import McpToolAdapterImpl
-from core.tools.skill_loader import SkillLoaderTool, SkillRunnerTool
+from core.tools.read import ReadTool
+from core.tools.run import RunTool
+from core.tools.skill import SkillTool
 from core.tools.subagent import SubAgentTool
 
-load_dotenv()  # Load environment variables from .env file
 
 from core.chat import (
     ChatMessage,
@@ -30,31 +31,18 @@ from core.in_memory_event_queue import InMemoryEventQueue
 from core.openrouter_chat import OpenRouterChat
 from core.event_loop.processor import EventLoopProcessor
 from core.tool_provider import InMemoryToolRegistry, ToolProvider
-from core.tools.math import AdditionTool
 
 
 async def run_once() -> None:
     queue = InMemoryEventQueue()
-    skill_registry = SkillRegistry()
-    mcp_adapter = McpToolAdapterImpl(mcp_url="http://localhost:3001/mcp")
-
-    mcp_tools = await mcp_adapter.get_tools()
-
-    skill_registry.register(
-        skill=Skill(
-            name="math",
-            description="A skill for performing mathematical calculations.",
-            skill_dir=Path("skills/math"),
-        )
-    )
 
     tool_registry = InMemoryToolRegistry(
         initial_tools=[
             SubAgentTool(queue),
-            SkillLoaderTool(skill_registry),
-            SkillRunnerTool(skill_registry),
+            SkillTool,
+            ReadTool,
+            RunTool,
         ]
-        + mcp_tools
     )
     tool_provider = ToolProvider(tool_registry)
     agent = OpenRouterChat(tool_provider=tool_provider, model="gpt-4o-mini")
@@ -85,7 +73,7 @@ async def run_once() -> None:
         event_queue=queue, event_processor_registry=event_processor_registry
     )
 
-    instruction = "what are the currently available tools you can use to help me?"
+    instruction = "I want you to start a subagent to calculate 134168734 times 381246. No hallucinations, only precise answers."
 
     conversation: list[ChatMessage] = [
         UserMessage(

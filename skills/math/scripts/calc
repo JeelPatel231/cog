@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-
-args_as_string="$*"
-result=$(python -c "print(eval('$args_as_string'))")
-echo "$result"

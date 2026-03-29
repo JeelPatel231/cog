@@ -16,7 +16,7 @@ class ToolDefinitionExtractor:
 
         input_param = next(iter(func_params.values()))
         input_class = input_param.annotation
-        print(f"Extracted input class {input_class} for tool '{tool.name}'")
+        # print(f"Extracted input class {input_class} for tool '{tool.name}'")
         if not isinstance(input_class, type) or not isinstance(input_class, ToolArgs):
             raise ValueError(
                 "Tool callback parameter must adhere to the ToolArgs protocol and be a class"
@@ -58,7 +58,6 @@ class ToolProvider:
     def __init__(self, tool_registry: ToolRegistry):
         self._tool_registry = tool_registry
 
-        # this should be factored out as this class is only for providing tool definitions, not executing them.
 
     # The execution should be handled by a separate class that takes in the tool registry as a dependency.
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolResult:

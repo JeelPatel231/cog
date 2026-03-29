@@ -1,0 +1,16 @@
+import sys
+
+def calculate(expression: str):
+    try:
+        result = eval(expression)
+        return result
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Error: No expression provided")
+    else:
+        expr = sys.argv[1]
+        print(calculate(expr))
