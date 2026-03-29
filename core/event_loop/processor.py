@@ -12,6 +12,22 @@ class EventLoopProcessor:
         self.event_queue = event_queue
         self.event_processors = event_processor_registry
 
+    async def next_tick(self):
+        event = await self.event_queue.pop()
+        event_type = event.__class__
+        processors = await self.event_processors.get_processors(event_type)
+        
+        if not processors:
+            print(f"No processors found for event type: {event_type}. Event: {event}")
+            return
+    
+        for processor in processors:
+            coroutine = processor.process(event)
+            async for yielded_event in coroutine:
+                assert isinstance(yielded_event, Event), f"Processor yielded an item that is not an Event: {yielded_event}"
+
+                await self.event_queue.push(yielded_event)
+
     async def start(self):
         """
         take an event from the loop. the event will be a serialized conversation containing user and assistant messages.
@@ -21,17 +37,4 @@ class EventLoopProcessor:
         the updated conversation should only be put back in the event loop if there are tool calls being made.
         """
         while True:
-            event = await self.event_queue.pop()
-            event_type = event.__class__
-            processors = await self.event_processors.get_processors(event_type)
-            
-            if not processors:
-                print(f"No processors found for event type: {event_type}. Event: {event}")
-                continue
-        
-            for processor in processors:
-                coroutine = processor.process(event)
-                async for yielded_event in coroutine:
-                    assert isinstance(yielded_event, Event), f"Processor yielded an item that is not an Event: {yielded_event}"
-
-                    await self.event_queue.push(yielded_event)
+            await self.next_tick()
