@@ -5,13 +5,10 @@ from dotenv import load_dotenv
 
 from core.event_processors.message import (
     MessageEventProcessor,
-    ReplyToUser,
     UserReplyEventProcessor,
 )
 from core.event_processors.subagent import (
-    SubAgentEvent,
     SubAgentThinkingEventProcessor,
-    SubAgentThinkingOutput,
     SubagentEventProcessor,
 )
 from core.history_transformer import PassthroughHistoryTransformer
@@ -25,7 +22,6 @@ load_dotenv()  # Load environment variables from .env file
 
 from core.chat import (
     ChatMessage,
-    ImageMessageContent,
     TextMessageContent,
     UserMessage,
 )
@@ -43,48 +39,42 @@ async def run_once() -> None:
     mcp_adapter = McpToolAdapterImpl(mcp_url="http://localhost:3001/mcp")
 
     mcp_tools = await mcp_adapter.get_tools()
-    
 
-    skill_registry.register(skill=Skill(
-        name="math",
-        description="A skill for performing mathematical calculations.",
-        skill_dir=Path("skills/math"),
-    ))
+    skill_registry.register(
+        skill=Skill(
+            name="math",
+            description="A skill for performing mathematical calculations.",
+            skill_dir=Path("skills/math"),
+        )
+    )
 
     tool_registry = InMemoryToolRegistry(
         initial_tools=[
             SubAgentTool(queue),
             SkillLoaderTool(skill_registry),
             SkillRunnerTool(skill_registry),
-        ] + mcp_tools 
+        ]
+        + mcp_tools
     )
     tool_provider = ToolProvider(tool_registry)
     agent = OpenRouterChat(tool_provider=tool_provider, model="gpt-4o-mini")
 
     input_processors = {
-        MessageEvent: {
-            MessageEventProcessor(
-                agent=agent,
-                tool_provider=tool_provider,
-                history_transformer=PassthroughHistoryTransformer(),
-            )
-        },
-        SubAgentEvent: {
-            SubagentEventProcessor(
-                agent=agent,
-                tool_provider=tool_provider,
-                history_transformer=PassthroughHistoryTransformer(),
-            )
-        },
+        MessageEventProcessor(
+            agent=agent,
+            tool_provider=tool_provider,
+            history_transformer=PassthroughHistoryTransformer(),
+        ),
+        SubagentEventProcessor(
+            agent=agent,
+            tool_provider=tool_provider,
+            history_transformer=PassthroughHistoryTransformer(),
+        ),
     }
 
     output_processors = {
-        ReplyToUser: {
-            UserReplyEventProcessor(),
-        },
-        SubAgentThinkingOutput: {
-            SubAgentThinkingEventProcessor(),
-        },
+        UserReplyEventProcessor(),
+        SubAgentThinkingEventProcessor(),
     }
 
     event_processor_registry = EventProcessorRegistry(

@@ -2,7 +2,7 @@ from asyncio import Future, Task
 
 import asyncio
 from dataclasses import dataclass
-from typing import AsyncIterator, Sequence
+from typing import AsyncIterator, Sequence, TypeGuard
 
 from pydantic import BaseModel, ConfigDict
 
@@ -61,7 +61,8 @@ class SubagentEventProcessor(SingleEventProcessor[SubAgentEvent, Event]):
         self.tool_provider = tool_provider
         self.history_transformer = history_transformer
 
-
+    async def can_process(self, event: Event) -> TypeGuard[SubAgentEvent]:
+        return isinstance(event, SubAgentEvent)
     
     async def process(self, event: SubAgentEvent) -> AsyncIterator[Event]:
         conversation = event.data
@@ -147,6 +148,9 @@ class SubagentEventProcessor(SingleEventProcessor[SubAgentEvent, Event]):
         raise ValueError(f"Unsupported message type: {type(last_message)}")
 
 class SubAgentThinkingEventProcessor(SingleEventProcessor[SubAgentThinkingOutput, Event]):
+    async def can_process(self, event: Event) -> TypeGuard[SubAgentThinkingOutput]:
+        return isinstance(event, SubAgentThinkingOutput)
+
     async def process(self, event: SubAgentThinkingOutput) -> AsyncIterator[None]:
         if False: yield
 

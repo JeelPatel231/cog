@@ -14,14 +14,11 @@ class EventLoopProcessor:
 
     async def next_tick(self):
         event = await self.event_queue.pop()
-        event_type = event.__class__
-        processors = await self.event_processors.get_processors(event_type)
-        
-        if not processors:
-            print(f"No processors found for event type: {event_type}. Event: {event}")
-            return
     
-        for processor in processors:
+        for processor in self.event_processors.processors:
+            if not await processor.can_process(event):
+                continue
+            
             coroutine = processor.process(event)
             async for yielded_event in coroutine:
                 assert isinstance(yielded_event, Event), f"Processor yielded an item that is not an Event: {yielded_event}"

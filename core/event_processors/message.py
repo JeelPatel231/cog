@@ -1,4 +1,4 @@
-from typing import AsyncIterator, Sequence
+from typing import AsyncIterator, Sequence, TypeGuard
 
 from core.chat import (
     ChatMessage,
@@ -49,6 +49,9 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
         self.agent = agent
         self.tool_provider = tool_provider
         self.history_transformer = history_transformer
+    
+    async def can_process(self, event: Event) -> TypeGuard[MessageEvent]:
+        return isinstance(event, MessageEvent)
 
     async def process(self, event: MessageEvent) -> AsyncIterator[Event]:
         conversation = event.data
@@ -125,7 +128,10 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
 
     
 class UserReplyEventProcessor(SingleEventProcessor[ReplyToUser, Event]):
-   async def process(self, event: ReplyToUser) -> AsyncIterator[None]:
+    async def can_process(self, event: Event) -> TypeGuard[ReplyToUser]:
+        return isinstance(event, ReplyToUser)
+
+    async def process(self, event: ReplyToUser) -> AsyncIterator[None]:
         if False: yield
         print(f"Assistant: {event.data}")
         return
