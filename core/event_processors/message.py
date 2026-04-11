@@ -14,30 +14,16 @@ from core.event_loop import InputEvent, OutputEvent, Event
 from core.tool_provider import ToolProvider
 from dataclasses import dataclass
 import asyncio
-from asyncio import Task
 
 
 @dataclass
 class MessageEvent(InputEvent):
-    data: Sequence[ChatMessage | DeferredToolCallBatch]
+    data: Sequence[ChatMessage]
 
 
 @dataclass
 class ReplyToUser(OutputEvent):
     data: str
-
-
-@dataclass
-class DeferredToolCall:
-    call_id: str
-    name: str
-    task_handle: Task
-
-
-@dataclass
-class DeferredToolCallBatch:
-    calls: Sequence[DeferredToolCall]
-
 
 class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
     def __init__(
@@ -77,43 +63,16 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
                 return
 
             tool_result_futures = [
-                asyncio.create_task(
-                    self.tool_provider.call_tool(tool.name, tool.arguments)
-                )
+                self.tool_provider.call_tool(tool.name, tool.arguments)
                 for tool in tool_calls
             ]
 
-            if tool_result_futures:
-                deferred_calls = DeferredToolCallBatch(
-                    calls=[
-                        DeferredToolCall(
-                            call_id=tool_call.id,
-                            name=tool_call.name,
-                            task_handle=task,
-                        )
-                        for tool_call, task in zip(tool_calls, tool_result_futures)
-                    ]
-                )
-                yield MessageEvent(data=[*conversation, response, deferred_calls])
-                return
-
-
-        if isinstance(last_message, DeferredToolCallBatch):
-            await asyncio.sleep(1)
-            tool_calls = last_message.calls
-            all_done = any(call.task_handle.done() for call in tool_calls)
-
-            if not all_done:
-                # if none of the tool calls are done, we can skip processing for now.
-                yield event
-                return
-
-            outputs = [call.task_handle.result() for call in tool_calls]
+            outputs = await asyncio.gather(*tool_result_futures)
 
             tool_results = [
                 ToolResponseMessage(
                     role="tool",
-                    id=tool.call_id,
+                    id=tool.id,
                     name=tool.name,
                     content=TextMessageContent(text=result.output),
                 )
@@ -121,7 +80,7 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
             ]
 
             # add the conversation back to loop for next iteration.
-            yield MessageEvent(data=[*conversation[:-1], *tool_results])
+            yield MessageEvent(data=[*conversation, response, *tool_results])
             return
 
         raise ValueError(f"Unsupported message type: {type(last_message)}")
@@ -131,7 +90,7 @@ class UserReplyEventProcessor(SingleEventProcessor[ReplyToUser, Event]):
     async def can_process(self, event: Event) -> TypeGuard[ReplyToUser]:
         return isinstance(event, ReplyToUser)
 
-    async def process(self, event: ReplyToUser) -> AsyncIterator[None]:
-        if False: yield
+    async def process(self, event: ReplyToUser) -> AsyncIterator[Event]:
         print(f"Assistant: {event.data}")
         return
+        yield

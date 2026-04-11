@@ -8,3 +8,13 @@ class EventQueue[T: Event](Protocol):
     """
     async def push(self, item: T) -> None: ...
     async def pop(self) -> T: ...
+
+
+class EventQueueIterator:
+    def __init__(self, event_queue: EventQueue) -> None:
+        self.__event_queue = event_queue
+    
+    async def __aiter__(self):
+        while True:
+          yield await self.__event_queue.pop()
+    

@@ -85,31 +85,13 @@ class OpenRouterChat(ChatProtocol):
                 },
             }
 
-        for attempt in range(self._max_retries + 1):
-            try:
-                completion = await self._client.chat.send_async(
-                    model=self._model,
-                    messages=mapped_messages,
-                    tools=cast(Any, request_tools if request_tools else None),
-                    stream=False,
-                    response_format=response_format_dict,
-                )
-                break
-            except Exception as error:
-                last_error = error
-                status_code = getattr(error, "status_code", None) or getattr(
-                    error, "status", None
-                )
-                is_retryable = status_code is None or status_code >= 500
-                if not is_retryable or attempt >= self._max_retries:
-                    raise RuntimeError(
-                        f"OpenRouter request failed after {attempt + 1} attempt(s): {error}"
-                    ) from error
-
-                await asyncio.sleep(self._retry_delay_seconds * (2**attempt))
-
-        if completion is None and last_error is not None:
-            raise RuntimeError(f"OpenRouter request failed: {last_error}")
+        completion = await self._client.chat.send_async(
+            model=self._model,
+            messages=mapped_messages,
+            tools=cast(Any, request_tools if request_tools else None),
+            stream=False,
+            response_format=response_format_dict,
+        )
 
         choice = completion.choices[0].message
 

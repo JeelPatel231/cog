@@ -10,7 +10,6 @@ from core.event_processors.message import (
 )
 from core.event_processors.subagent import (
     SubAgentThinkingEventProcessor,
-    SubagentEventProcessor,
 )
 from core.history_transformer import PassthroughHistoryTransformer
 from core.event_loop.processor_registry import EventProcessorRegistry
@@ -18,7 +17,7 @@ from core.tools.mcp_adapter import McpToolAdapterImpl
 from core.tools.read import ReadTool
 from core.tools.run import RunTool
 from core.tools.skill import SkillTool
-from core.tools.subagent import SubAgentTool
+from core.tools.subagent import SubAgent, SubAgentTool
 
 
 from core.chat import (
@@ -32,13 +31,17 @@ from core.openrouter_chat import OpenRouterChat
 from core.event_loop.processor import EventLoopProcessor
 from core.tool_provider import InMemoryToolRegistry, ToolProvider
 
+import logging
+
+# logging.basicConfig(level=logging.DEBUG)
+
 
 async def run_once() -> None:
     queue = InMemoryEventQueue()
+    no_op_history_transformer = PassthroughHistoryTransformer()
 
     tool_registry = InMemoryToolRegistry(
         initial_tools=[
-            SubAgentTool(queue),
             SkillTool,
             ReadTool,
             RunTool,
@@ -47,16 +50,17 @@ async def run_once() -> None:
     tool_provider = ToolProvider(tool_registry)
     agent = OpenRouterChat(tool_provider=tool_provider, model="gpt-4o-mini")
 
+    subagent = SubAgent(agent, tool_provider, no_op_history_transformer)
+
+    # this is a circular dependency, try to fix this.
+    # sub agent is a tool, that needs tool_registry, which is to be registered in the tool registry
+    await tool_registry.register_tool(SubAgentTool(subagent, queue))
+
     input_processors = {
         MessageEventProcessor(
             agent=agent,
             tool_provider=tool_provider,
-            history_transformer=PassthroughHistoryTransformer(),
-        ),
-        SubagentEventProcessor(
-            agent=agent,
-            tool_provider=tool_provider,
-            history_transformer=PassthroughHistoryTransformer(),
+            history_transformer=no_op_history_transformer,
         ),
     }
 
@@ -78,9 +82,7 @@ async def run_once() -> None:
     conversation: list[ChatMessage] = [
         UserMessage(
             role="user",
-            content=TextMessageContent(
-                text=instruction
-            ),
+            content=TextMessageContent(text=instruction),
         )
     ]
 
