@@ -21,7 +21,7 @@ Instead:
 1. Extract the expression from the user input
 2. Run the command:
 
-   python calculator.py "<expression>"
+   ./calculator "<expression>"
 
 3. Return the output from the script
 
@@ -31,7 +31,7 @@ User input:
 "5 + 3 * 2"
 
 Execution:
-python calculator.py "5 + 3 * 2"
+./calculator "5 + 3 * 2"
 
 Output:
 11

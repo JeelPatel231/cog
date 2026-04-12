@@ -29,10 +29,10 @@ async def run(args: dict[str, Any] | None) -> ToolResult:
         raise ValueError("The path does not point to a script")
     
     result = subprocess.run(
-        [sys.executable, str(path), *run.arguments],
+        [str(path), *run.arguments],
         capture_output=True,
         text=True,
-        env={**os.environ, 'PYTHONPATH': str(path.parent)}
+        env={**os.environ}
     )
     run_result = RunResult(stdout=result.stdout, stderr=result.stderr, return_code=result.returncode)
     return ToolResult(output=f"Return code: {run_result.return_code}\nSTDOUT:\n{run_result.stdout}\nSTDERR:\n{run_result.stderr}")
