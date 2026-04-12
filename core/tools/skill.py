@@ -2,12 +2,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import frontmatter
+from pydantic import BaseModel
 
 from core.tools import Tool, ToolResult
-from core.tools.utils.pydantic_adapter import PydanticToolArgs
-
 
 # code copied/modified from https://www.jairtrejo.com/blog/2026/01/agent-skills
+
 
 @dataclass
 class Skill:
@@ -17,61 +17,67 @@ class Skill:
 
     @classmethod
     def from_directory(cls, directory):
-        location = str((Path(directory) / 'SKILL.md').resolve())
-        with open(location, 'r') as f:
+        location = str((Path(directory) / "SKILL.md").resolve())
+        with open(location, "r") as f:
             post = frontmatter.load(f)
 
-        name = post['name']
-        description = post['description']
+        name = post["name"]
+        description = post["description"]
         assert isinstance(name, str), "name param in skill metadata must be a string."
-        assert isinstance(description, str), "description param in skill metadata must be a string."
+        assert isinstance(
+            description, str
+        ), "description param in skill metadata must be a string."
 
-        return cls(
-            name=name,
-            description=description,
-            location=location
-        )
+        return cls(name=name, description=description, location=location)
 
     def instructions(self):
-        with open(self.location, 'r') as f:
+        with open(self.location, "r") as f:
             post = frontmatter.load(f)
         return post.content
 
+
 import os
-from typing import List
+from typing import Any, List
+
 
 def load_skills() -> List[Skill]:
     return [
         Skill.from_directory(full_path)
-        for skills_root in os.environ.get('SKILLS_PATH', '').split(':')
+        for skills_root in os.environ.get("SKILLS_PATH", "").split(":")
         for directory in Path(skills_root).iterdir()
         if (full_path := Path(skills_root) / directory).is_dir()
     ]
 
+
 import xml.etree.ElementTree as ET
+
 
 def available_skills() -> str:
     """Returns a skill description block to be added to the system prompt"""
     skills = load_skills()
-    root = ET.Element('available_skills')
+    root = ET.Element("available_skills")
     for s in skills:
-        skill_el = ET.SubElement(root, 'skill')
-        ET.SubElement(skill_el, 'name').text = s.name
-        ET.SubElement(skill_el, 'description').text = s.description
-        ET.SubElement(skill_el, 'location').text = s.location
+        skill_el = ET.SubElement(root, "skill")
+        ET.SubElement(skill_el, "name").text = s.name
+        ET.SubElement(skill_el, "description").text = s.description
+        ET.SubElement(skill_el, "location").text = s.location
     ET.indent(root)
-    return ET.tostring(root, encoding='unicode')
+    return ET.tostring(root, encoding="unicode")
 
-class SkillToolArgs(PydanticToolArgs):
+
+class SkillToolArgs(BaseModel):
     skill_name: str
 
-async def skill(args: SkillToolArgs) -> ToolResult:
-    for skills_root in os.environ.get('SKILLS_PATH', '').split(":"):
-        skill_path = Path(skills_root) / args.skill_name
+
+async def skill(args: dict[str, Any] | None) -> ToolResult:
+    skill_args = SkillToolArgs.model_validate(args)
+    for skills_root in os.environ.get("SKILLS_PATH", "").split(":"):
+        skill_path = Path(skills_root) / skill_args.skill_name
         if skill_path.exists():
             return ToolResult(output=Skill.from_directory(skill_path).instructions())
-    
-    raise ValueError(f"Skill {args.skill_name} not found in SKILLS_PATH.")
+
+    raise ValueError(f"Skill {skill_args.skill_name} not found in SKILLS_PATH.")
+
 
 skill_instructions = f"""
 Execute a skill within the main conversation
@@ -103,4 +109,5 @@ SkillTool = Tool(
     name="skill",
     description=skill_instructions,
     callback=skill,
+    args_json_schema=SkillToolArgs.model_json_schema()
 )

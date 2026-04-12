@@ -1,5 +1,4 @@
 import asyncio
-from asyncio import Future
 from typing import Any, AsyncIterator, Sequence
 
 from pydantic import BaseModel, ConfigDict
@@ -11,13 +10,10 @@ from core.chat import (
     ToolResponseMessage,
     UserMessage,
 )
-from core.event_loop import Event
 from core.event_loop.event_queue import EventQueue
-from core.event_processors.message import MessageEvent
 from core.event_processors.subagent import SubAgentThinkingOutput
 from core.history_transformer import HistoryTransformer
 from core.tool_provider import ToolProvider
-from core.tools.utils.pydantic_adapter import PydanticToolArgs
 
 from . import Tool, ToolResult
 
@@ -29,7 +25,7 @@ class SubAgentResponseFormat(BaseModel):
     output: str
 
 
-class SubAgentInput(PydanticToolArgs):
+class SubAgentInput(BaseModel):
     instruction: str
 
 
@@ -88,14 +84,14 @@ class SubAgent:
             ]
 
             for tool_result in tool_results:
-                print(
-                    f"Tool '{tool_result.name}' returned: {tool_result.content.text}"
-                )
+                print(f"Tool '{tool_result.name}' returned: {tool_result.content.text}")
 
             conversation = [*conversation, response, *tool_results]
 
+
 def call_subagent(subagent: SubAgent, event_queue: EventQueue):
-    async def inner(input: SubAgentInput) -> ToolResult:
+    async def inner(args: dict[str, Any] | None) -> ToolResult:
+        input = SubAgentInput.model_validate(args)
         print(f"Calling sub-agent with instruction: {input.instruction}")
         conversation = [
             UserMessage(role="user", content=TextMessageContent(text=input.instruction))
@@ -104,7 +100,7 @@ def call_subagent(subagent: SubAgent, event_queue: EventQueue):
         async for event in subagent.do_task(conversation):
             last_event = event
             await event_queue.push(event)
-        
+
         assert last_event is not None
 
         return ToolResult(output=last_event.data)
@@ -112,9 +108,10 @@ def call_subagent(subagent: SubAgent, event_queue: EventQueue):
     return inner
 
 
-def SubAgentTool(subagent: SubAgent, event_queue: EventQueue) -> Tool[SubAgentInput]:
-    return Tool[SubAgentInput](
+def SubAgentTool(subagent: SubAgent, event_queue: EventQueue):
+    return Tool(
         name="subagent",
         description="Delegate tasks to a sub-agent.",
         callback=call_subagent(subagent, event_queue),
+        args_json_schema=SubAgentInput.model_json_schema()
     )

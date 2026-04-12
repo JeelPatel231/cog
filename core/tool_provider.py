@@ -1,29 +1,6 @@
 import json
-from inspect import signature
 from typing import Any, Protocol
-from core.tools import Tool, ToolArgs, ToolResult
-
-
-class ToolDefinitionExtractor:
-    @staticmethod
-    def input_model(tool: Tool) -> ToolArgs:
-        func_params = signature(tool.callback).parameters
-        if len(func_params) != 1:
-            raise ValueError("Tool callback must have exactly one parameter")
-
-        input_param = next(iter(func_params.values()))
-        input_class = input_param.annotation
-        # print(f"Extracted input class {input_class} for tool '{tool.name}'")
-        if not isinstance(input_class, type) or not isinstance(input_class, ToolArgs):
-            raise ValueError(
-                "Tool callback parameter must adhere to the ToolArgs protocol and be a class"
-            )
-
-        return input_class
-
-    @staticmethod
-    def input_schema(tool: Tool) -> dict[str, Any]:
-        return ToolDefinitionExtractor.input_model(tool).tool_json_schema()
+from core.tools import Tool, ToolResult
 
 
 class ToolRegistry(Protocol):
@@ -60,10 +37,8 @@ class ToolProvider:
     # The execution should be handled by a separate class that takes in the tool registry as a dependency.
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolResult:
         tool = await self._tool_registry.get_tool(tool_name)
-        input_model = ToolDefinitionExtractor.input_model(tool)
-        parsed_input = input_model.tool_validate(arguments)
         try:
-            return await tool.callback(parsed_input)
+            return await tool.callback(arguments)
         except Exception as error:
             return ToolResult(output=f"Error executing tool '{tool_name}': {error}")
 
@@ -73,7 +48,7 @@ class ToolProvider:
             {
                 "name": tool.name,
                 "description": tool.description,
-                "input_schema": ToolDefinitionExtractor.input_schema(tool),
+                "input_schema": tool.args_json_schema,
             }
             for tool in all_tools
         ]

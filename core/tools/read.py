@@ -1,9 +1,10 @@
 from pathlib import Path
 import os
+from typing import Any
+
+from pydantic import BaseModel
 
 from core.tools import Tool, ToolResult
-from core.tools.utils.pydantic_adapter import PydanticToolArgs
-
 
 def is_valid_absolute_path(path_str: str) -> bool:
     path = Path(path_str)
@@ -13,11 +14,12 @@ def is_valid_absolute_path(path_str: str) -> bool:
     return any(path.is_relative_to(root) for root in valid_roots)
 
 
-class ReadParams(PydanticToolArgs):
+class ReadParams(BaseModel):
     absolute_path: str
 
+async def read(args: dict[str, Any] | None) -> ToolResult:
+    read = ReadParams.model_validate(args)
 
-async def read(read: ReadParams) -> ToolResult:
     if not is_valid_absolute_path(read.absolute_path):
         raise ValueError(
             "The path is not absolute, or the agent is not authorized to read it"
@@ -30,4 +32,5 @@ ReadTool = Tool(
     name="read",
     description="Reads the contents of a file at a given absolute path.",
     callback=read,
+    args_json_schema=ReadParams.model_json_schema()
 )

@@ -1,9 +1,8 @@
-from typing import Protocol, Self
+from typing import Any, Optional, Protocol
 
 from core.tools import Tool, ToolResult
 from fastmcp import Client
 from mcp.types import TextContent, Tool as McpTool
-from jsonschema import validate
 
 class McpToolAdapter(Protocol):
     async def get_tools(self) -> list[Tool]: ... 
@@ -15,33 +14,18 @@ class McpToolAdapterImpl(McpToolAdapter):
         self.client = Client(mcp_url)
 
     def __create_tool(self, client: Client, mcp_tool: McpTool):
-
-        class JsonSchemaToolArgs:
-            def __init__(self, arguments: dict):
-                self.validated_args = arguments
-
-            @classmethod
-            def tool_json_schema(cls) -> dict:
-                return mcp_tool.inputSchema
-                
-            @classmethod
-            def tool_validate(cls, arguments: dict) -> Self:
-                validate(instance=arguments, schema=cls.tool_json_schema())
-                return cls(arguments)
-
-        async def callback(args: JsonSchemaToolArgs) -> ToolResult:
-            arguments = args.validated_args
+        async def callback(arguments: Optional[dict[str, Any]]) -> ToolResult:
             async with client:
                 result = await client.call_tool(mcp_tool.name, arguments)
             
             text_result = ''.join([x.text for x in result.content if isinstance(x, TextContent)])
-            # print(f"Calling MCP tool {mcp_tool.name} with arguments: {arguments}, got result: {result}")
             return ToolResult(output=text_result)
 
         return Tool(
             name=mcp_tool.name,
             description=mcp_tool.description or "",
             callback=callback,
+            args_json_schema=mcp_tool.inputSchema
         )
 
     async def get_tools(self) -> list[Tool]:
