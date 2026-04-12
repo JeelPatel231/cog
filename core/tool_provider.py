@@ -1,9 +1,6 @@
 import json
 from inspect import signature
 from typing import Any, Protocol
-
-from pydantic import BaseModel
-
 from core.tools import Tool, ToolArgs, ToolResult
 
 
@@ -30,7 +27,7 @@ class ToolDefinitionExtractor:
 
 
 class ToolRegistry(Protocol):
-    async def register_tool(self, tool: Tool) -> None: ...
+    async def register_tool(self, *tool: Tool) -> None: ...
 
     async def get_tool(self, tool_name: str) -> Tool: ...
 
@@ -41,8 +38,9 @@ class InMemoryToolRegistry:
     def __init__(self, initial_tools: list[Tool] = []):
         self._tools: dict[str, Tool] = {tool.name: tool for tool in initial_tools}
 
-    async def register_tool(self, tool: Tool) -> None:
-        self._tools[tool.name] = tool
+    async def register_tool(self, *tools: Tool) -> None:
+        for tool in tools:
+            self._tools[tool.name] = tool
 
     async def get_tool(self, tool_name: str) -> Tool:
         try:

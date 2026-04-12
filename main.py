@@ -2,6 +2,7 @@ import asyncio
 
 from pathlib import Path
 from dotenv import load_dotenv
+
 load_dotenv()  # Load environment variables from .env file
 
 from core.event_processors.message import (
@@ -40,21 +41,18 @@ async def run_once() -> None:
     queue = InMemoryEventQueue()
     no_op_history_transformer = PassthroughHistoryTransformer()
 
-    tool_registry = InMemoryToolRegistry(
-        initial_tools=[
-            SkillTool,
-            ReadTool,
-            RunTool,
-        ]
-    )
+    tool_registry = InMemoryToolRegistry()
     tool_provider = ToolProvider(tool_registry)
     agent = OpenRouterChat(tool_provider=tool_provider, model="gpt-4o-mini")
 
     subagent = SubAgent(agent, tool_provider, no_op_history_transformer)
 
-    # this is a circular dependency, try to fix this.
-    # sub agent is a tool, that needs tool_registry, which is to be registered in the tool registry
-    await tool_registry.register_tool(SubAgentTool(subagent, queue))
+    await tool_registry.register_tool(
+        SubAgentTool(subagent, queue),
+        SkillTool,
+        ReadTool,
+        RunTool,
+    )
 
     input_processors = {
         MessageEventProcessor(
