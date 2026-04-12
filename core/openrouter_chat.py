@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 from typing import Any, Optional, Type, cast
@@ -65,14 +64,6 @@ class OpenRouterChat(ChatProtocol):
                 }
                 for definition in definitions
             ]
-
-            # Put all tool definitions in a system prompt only on the very first message.
-            if len(message) == 1 and definitions:
-                system_prompt = await self._tool_provider.get_system_prompt()
-                mapped_messages.insert(0, {"role": "system", "content": system_prompt})
-
-        completion: Any = None
-        last_error: Exception | None = None
 
         response_format_dict: ResponseFormatJSONSchemaTypedDict | None = None
         if response_format is not None:
