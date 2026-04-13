@@ -35,15 +35,17 @@ class SubAgent:
         agent: ChatProtocol,
         tool_provider: ToolProvider,
         history_transformer: HistoryTransformer,
+        max_iterations: int = 10,
     ) -> None:
         self.agent = agent
         self.tool_provider = tool_provider
         self.history_transformer = history_transformer
+        self.max_iterations = max_iterations
 
     async def do_task(
         self, conversation: Sequence[ChatMessage]
     ) -> AsyncIterator[SubAgentThinkingOutput]:
-        while True:
+        for _ in range(self.max_iterations):
             model_history = self.history_transformer.transform(conversation)
 
             response = await self.agent.send_message(
