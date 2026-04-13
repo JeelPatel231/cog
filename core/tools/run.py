@@ -39,7 +39,7 @@ async def run(args: dict[str, Any] | None) -> ToolResult:
 
 RunTool = Tool(
     name="run",
-    description="Runs the python script at the given path. The path must be ABSOLUTE in format.",
+    description="Runs the executable at the given path. The path must be ABSOLUTE in format.",
     callback=run,
     args_json_schema=RunToolArgs.model_json_schema()
 )

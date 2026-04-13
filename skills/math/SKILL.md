@@ -1,12 +1,12 @@
 ---
 name: math
-description: Evaluate mathematical expressions using a Python script
+description: Evaluate mathematical expressions using a calculator script.
 ---
 
 # Math Calculator Skill
 
 ## Purpose
-This skill executes a Python script to evaluate math expressions.
+This skill runs an executable to evaluate math expressions.
 
 ## When to use
 Use this skill ONLY when:
