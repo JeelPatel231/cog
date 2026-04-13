@@ -10,6 +10,7 @@ from core.chat import (
     ToolResponseMessage,
     UserMessage,
 )
+from core.chat import SystemMessage, TextMessageContent, UserMessage
 from core.event_loop.event_queue import EventQueue
 from core.event_processors.subagent import SubAgentThinkingOutput
 from core.history_transformer import HistoryTransformer
@@ -27,7 +28,6 @@ class SubAgentResponseFormat(BaseModel):
 
 class SubAgentInput(BaseModel):
     instruction: str
-
 
 class SubAgent:
     def __init__(
@@ -89,11 +89,25 @@ class SubAgent:
             conversation = [*conversation, response, *tool_results]
 
 
+SUBAGENT_SYSTEM_PROMPT = """
+You are a sub-agent. You will receive instructions from the main agent, and you should execute them and provide a final output when done.
+You can not communicate with the main agent or the user, you can only receive instructions and provide a final output.
+
+You should reason through all the steps needed to complete the task.
+If the task needs extra information, or fails, or is not possible to complete, you provide all the details in the final output so the main agent can decide what to do next.
+""".strip()
+
 def call_subagent(subagent: SubAgent, event_queue: EventQueue):
     async def inner(args: dict[str, Any] | None) -> ToolResult:
         input = SubAgentInput.model_validate(args)
         print(f"Calling sub-agent with instruction: {input.instruction}")
         conversation = [
+                    SystemMessage(
+                        role="system",
+                        content=TextMessageContent(
+                            text=SUBAGENT_SYSTEM_PROMPT,
+                        )
+                    ),
             UserMessage(role="user", content=TextMessageContent(text=input.instruction))
         ]
         last_event = None
@@ -107,6 +121,16 @@ def call_subagent(subagent: SubAgent, event_queue: EventQueue):
 
     return inner
 
+subagent_tool_description = """
+Delegate tasks to a sub-agent by providing instructions.
+
+The spawned agent will be autonomous and it cannot converse with you or user.
+It can only receive instructions from you and provide a final output when it completes the task.
+
+This tool is specially useful for delegating complex tasks that require multiple steps or reasoning, 
+and you want to offload that work to a separate agent, in order to keep your context window clean and 
+focused on high-level instructions and final outputs.
+"""
 
 def SubAgentTool(subagent: SubAgent, event_queue: EventQueue):
     return Tool(
