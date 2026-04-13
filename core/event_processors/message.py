@@ -12,6 +12,7 @@ from core.history_transformer import HistoryTransformer
 from core.event_loop.processor_registry import SingleEventProcessor
 from core.event_loop import InputEvent, OutputEvent, Event
 from core.tool_provider import ToolProvider
+from core.logger import logger
 from dataclasses import dataclass
 import asyncio
 
@@ -46,7 +47,7 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
         last_message = conversation[-1]
 
         if isinstance(last_message, (UserMessage, ToolResponseMessage)):
-            print(f"User/Tool message received: {last_message}")
+            logger.info(f"User/Tool message received: {last_message}")
 
             model_history = self.history_transformer.transform(conversation)
             response = await self.agent.send_message(model_history)
@@ -79,6 +80,7 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
                 for tool, result in zip(tool_calls, outputs)
             ]
 
+            logger.debug(f"All tool call tasks completed")
             # add the conversation back to loop for next iteration.
             yield MessageEvent(data=[*conversation, response, *tool_results])
             return

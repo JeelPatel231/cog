@@ -18,6 +18,7 @@ from core.chat import (
     UserMessage,
 )
 from core.tool_provider import ToolProvider
+from core.logger import logger
 
 
 class OpenRouterChat(ChatProtocol):

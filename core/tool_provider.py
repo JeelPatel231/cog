@@ -13,6 +13,7 @@ class ToolRegistry(Protocol):
 
 class InMemoryToolRegistry:
     def __init__(self, initial_tools: list[Tool] = []):
+        logger.debug(f"Initializing InMemoryToolRegistry with tools: {[tool.name for tool in initial_tools]}")
         self._tools: dict[str, Tool] = {tool.name: tool for tool in initial_tools}
 
     async def register_tool(self, *tools: Tool) -> None:
@@ -31,15 +32,18 @@ class InMemoryToolRegistry:
 
 class ToolProvider:
     def __init__(self, tool_registry: ToolRegistry):
+        logger.debug(f"Initializing ToolProvider with registry: {tool_registry}")
         self._tool_registry = tool_registry
 
 
     # The execution should be handled by a separate class that takes in the tool registry as a dependency.
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolResult:
+        logger.debug(f"Calling tool '{tool_name}' with arguments: {arguments}")
         tool = await self._tool_registry.get_tool(tool_name)
         try:
             return await tool.callback(arguments)
         except Exception as error:
+            logger.error(f"Error executing tool '{tool_name}': {error}")
             return ToolResult(output=f"Error executing tool '{tool_name}': {error}")
 
     async def get_tool_definitions(self) -> list[dict[str, Any]]:
