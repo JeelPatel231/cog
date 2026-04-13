@@ -1,7 +1,7 @@
 import json
 from typing import Any, Protocol
 from core.tools import Tool, ToolResult
-
+from core.logger import logger
 
 class ToolRegistry(Protocol):
     async def register_tool(self, *tool: Tool) -> None: ...
