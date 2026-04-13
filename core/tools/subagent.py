@@ -127,7 +127,7 @@ Delegate tasks to a sub-agent by providing instructions.
 The spawned agent will be autonomous and it cannot converse with you or user.
 It can only receive instructions from you and provide a final output when it completes the task.
 
-This tool is specially useful for delegating complex tasks that require multiple steps or reasoning, 
+This tool is especially useful for delegating complex tasks that require multiple steps or reasoning, 
 and you want to offload that work to a separate agent, in order to keep your context window clean and 
 focused on high-level instructions and final outputs.
 """
