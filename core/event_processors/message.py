@@ -1,9 +1,10 @@
-from typing import AsyncIterator, Sequence, TypeGuard
+from typing import AsyncIterator, Sequence, TypeGuard, assert_never
 
 from core.chat import (
     ChatMessage,
     ChatProtocol,
     AssistantMessage,
+    SystemMessage,
     TextMessageContent,
     UserMessage,
     ToolResponseMessage,
@@ -36,62 +37,71 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
         agent: ChatProtocol,
         tool_provider: ToolProvider,
         history_transformer: HistoryTransformer,
+        max_iterations: int = 10,
     ) -> None:
         self.agent = agent
         self.tool_provider = tool_provider
         self.history_transformer = history_transformer
+        self.max_iterations = max_iterations
     
     async def can_process(self, event: Event) -> TypeGuard[MessageEvent]:
         return isinstance(event, MessageEvent)
 
     async def process(self, event: MessageEvent) -> AsyncIterator[Event]:
+        iterations = 0
         conversation = event.data
-        assert conversation, "Conversation cannot be empty"
 
-        last_message = conversation[-1]
+        while iterations < self.max_iterations:
+            assert conversation, "Conversation cannot be empty"
+            last_message = conversation[-1]
 
-        if isinstance(last_message, (UserMessage, ToolResponseMessage)):
-            logger.info(f"User/Tool message received: {last_message}")
+            if isinstance(last_message, (AssistantMessage, SystemMessage)):
+                logger.error("Assistant/System message must not be sent back to LLM api call. This is potentially an infinite loop.")
+                raise RuntimeError('AssistantMessage/SystemMessage is unsupported for processing in agent loop.')
 
-            model_history = self.history_transformer.transform(conversation)
-            response = await self.agent.send_message(model_history)
+            if isinstance(last_message, (UserMessage, ToolResponseMessage)):
+                logger.info(f"User/Tool message received: {last_message}")
 
-            tool_calls = response.tool_calls
-            
-            assert isinstance(response.content, TextMessageContent), "Expected TextMessageContent in response"
+                model_history = self.history_transformer.transform(conversation)
+                response = await self.agent.send_message(model_history)
 
-            if response.content.text and tool_calls:
-                yield IntermediateResponse(data=response.content.text)
+                tool_calls = response.tool_calls
+                
+                assert isinstance(response.content, TextMessageContent), "Expected TextMessageContent in response"
 
-            if not tool_calls:
-                # termination condition. no more tool calls then the agent is done.
-                assert response.content.text is not None, "Agent didn't call any tool nor has anything to say."
-                yield ReplyToUser(data=response.content.text)
-                return
+                if response.content.text and tool_calls:
+                    yield IntermediateResponse(data=response.content.text)
 
-            tool_result_futures = [
-                self.tool_provider.call_tool(tool.name, tool.arguments)
-                for tool in tool_calls
-            ]
+                if not tool_calls:
+                    # termination condition. no more tool calls then the agent is done.
+                    assert response.content.text is not None, "Agent didn't call any tool nor has anything to say."
+                    yield ReplyToUser(data=response.content.text)
+                    return
 
-            outputs = await asyncio.gather(*tool_result_futures)
+                tool_result_futures = [
+                    self.tool_provider.call_tool(tool.name, tool.arguments)
+                    for tool in tool_calls
+                ]
 
-            tool_results = [
-                ToolResponseMessage(
-                    role="tool",
-                    id=tool.id,
-                    name=tool.name,
-                    content=TextMessageContent(text=result.output),
-                )
-                for tool, result in zip(tool_calls, outputs)
-            ]
+                outputs = await asyncio.gather(*tool_result_futures)
 
-            logger.debug(f"All tool call tasks completed")
-            # add the conversation back to loop for next iteration.
-            yield MessageEvent(data=[*conversation, response, *tool_results])
-            return
+                tool_results = [
+                    ToolResponseMessage(
+                        role="tool",
+                        id=tool.id,
+                        name=tool.name,
+                        content=TextMessageContent(text=result.output),
+                    )
+                    for tool, result in zip(tool_calls, outputs)
+                ]
 
-        raise ValueError(f"Unsupported message type: {type(last_message)}")
+                logger.debug(f"All tool call tasks completed")
+
+                # add the conversation back to loop for next iteration.
+                conversation = [*conversation, response, *tool_results]
+                continue
+
+            assert_never(last_message)
 
     
 class UserReplyEventProcessor(SingleEventProcessor[ReplyToUser, Event]):
