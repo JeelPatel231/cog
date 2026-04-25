@@ -26,6 +26,10 @@ class MessageEvent(InputEvent):
 class ReplyToUser(OutputEvent):
     data: str
 
+@dataclass
+class IntermediateResponse(OutputEvent):
+    data: str
+
 class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
     def __init__(
         self,
@@ -56,11 +60,13 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
             
             assert isinstance(response.content, TextMessageContent), "Expected TextMessageContent in response"
 
-            if response.content.text:
-                yield ReplyToUser(data=response.content.text)
+            if response.content.text and tool_calls:
+                yield IntermediateResponse(data=response.content.text)
 
             if not tool_calls:
-                # nothing to process.
+                # termination condition. no more tool calls then the agent is done.
+                assert response.content.text is not None, "Agent didn't call any tool nor has anything to say."
+                yield ReplyToUser(data=response.content.text)
                 return
 
             tool_result_futures = [
