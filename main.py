@@ -28,7 +28,7 @@ from core.chat import (
 )
 from core.event_processors.message import MessageEvent
 from core.in_memory_event_queue import InMemoryEventQueue
-from core.openrouter_chat import OpenRouterChat
+from core.chat.openai_chat import OpenAIChat
 from core.event_loop.processor import EventLoopProcessor
 from core.tool_provider import InMemoryToolRegistry, ToolProvider
 
@@ -43,7 +43,8 @@ async def run_once() -> None:
 
     tool_registry = InMemoryToolRegistry()
     tool_provider = ToolProvider(tool_registry)
-    agent = OpenRouterChat(tool_provider=tool_provider, model="gpt-4o-mini")
+    # agent = OpenRouterChat(tool_provider=tool_provider, model="gpt-4o-mini")
+    agent = OpenAIChat(api_key='mock', base_url='http://localhost:8080/v1', tool_provider=tool_provider)
 
     subagent = SubAgent(agent, tool_provider, no_op_history_transformer)
 
