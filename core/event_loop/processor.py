@@ -17,12 +17,15 @@ class EventLoopProcessor:
         self.event_processors = event_processor_registry
 
     async def handle_event(self, coroutine: AsyncIterator[Event]):
-        async for yielded_event in coroutine:
-            assert isinstance(
-                yielded_event, Event
-            ), f"Processor yielded an item that is not an Event: {yielded_event}"
+        try:
+            async for yielded_event in coroutine:
+                assert isinstance(
+                    yielded_event, Event
+                ), f"Processor yielded an item that is not an Event: {yielded_event}"
 
-            await self.event_queue.push(yielded_event)
+                await self.event_queue.push(yielded_event)
+        except Exception as error:
+            print(error)
 
     async def start(self):
         """
