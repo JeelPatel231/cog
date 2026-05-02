@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, AsyncIterator, Sequence
+from typing import Any
+from collections.abc import AsyncIterator, Sequence
 
 from pydantic import BaseModel, ConfigDict
 

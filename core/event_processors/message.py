@@ -1,4 +1,5 @@
-from typing import AsyncIterator, Sequence, TypeGuard, assert_never
+from typing import TypeGuard, assert_never
+from collections.abc import AsyncIterator, Sequence
 
 from core.chat import (
     ChatMessage,

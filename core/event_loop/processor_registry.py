@@ -1,4 +1,4 @@
-from typing import Sequence
+from collections.abc import Sequence
 
 from core.event_loop.single_event_processor import SingleEventProcessor
 from core.logger import logger

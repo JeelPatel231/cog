@@ -1,11 +1,10 @@
 import json
 import os
-import asyncio
-from typing import Any, Iterable, Optional, Type, cast
+from typing import Any, cast
+from collections.abc import Iterable
 
 from openai import AsyncOpenAI, omit, Omit
 from openai.types.chat import ChatCompletionToolUnionParam
-from openai.types.chat.chat_completion_message_function_tool_call import Function
 from openai.types.shared_params.response_format_json_schema import (
     ResponseFormatJSONSchema,
 )
@@ -46,7 +45,7 @@ class OpenAIChat(ChatProtocol):
         self,
         message: list[ChatMessage],
         *,
-        response_format: Optional[Type[BaseModel]] = None,
+        response_format: type[BaseModel]|None = None,
     ) -> AssistantMessage:
         mapped_messages = [self._to_openai_message(m) for m in message]
 

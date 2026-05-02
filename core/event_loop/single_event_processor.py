@@ -1,4 +1,5 @@
-from typing import AsyncIterator, Optional, Protocol, TypeGuard
+from typing import Protocol, TypeGuard
+from collections.abc import AsyncIterator
 from . import Event
 
 

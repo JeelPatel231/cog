@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Optional, Type, cast
+from typing import Any, cast
 
 from openrouter import OpenRouter
 from openrouter.components.responseformatjsonschema import ResponseFormatJSONSchemaTypedDict
@@ -47,7 +47,7 @@ class OpenRouterChat(ChatProtocol):
         self._retry_delay_seconds = retry_delay_seconds
 
     async def send_message(
-        self, message: list[ChatMessage], *, response_format: Optional[Type[BaseModel]] = None
+        self, message: list[ChatMessage], *, response_format: type[BaseModel]|None = None
     ) -> AssistantMessage:
         mapped_messages: list[Any] = [self._to_openrouter_message(m) for m in message]
         request_tools: list[dict[str, Any]] = []
