@@ -1,6 +1,6 @@
 from typing import TypeGuard, assert_never
 from collections.abc import AsyncIterator, Sequence
-
+from aiostream.stream import merge
 from core.chat import (
     ChatMessage,
     ChatProtocol,
@@ -80,20 +80,22 @@ class MessageEventProcessor(SingleEventProcessor[MessageEvent, Event]):
                     return
 
                 tool_result_futures = [
-                    self.tool_provider.call_tool(tool.name, tool.arguments)
+                    await self.tool_provider.call_tool(tool.name, tool.arguments)
                     for tool in tool_calls
                 ]
 
-                outputs = await asyncio.gather(*tool_result_futures)
+                async with merge(*tool_result_futures).stream() as merged_streams:
+                    async for _event in merged_streams:
+                        yield _event
 
                 tool_results = [
                     ToolResponseMessage(
                         role="tool",
                         id=tool.id,
                         name=tool.name,
-                        content=TextMessageContent(text=result.output),
+                        content=TextMessageContent(text=result.last.output),
                     )
-                    for tool, result in zip(tool_calls, outputs)
+                    for tool, result in zip(tool_calls, tool_result_futures)
                 ]
 
                 logger.debug(f"All tool call tasks completed")

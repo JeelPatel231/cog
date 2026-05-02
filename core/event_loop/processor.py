@@ -1,33 +1,21 @@
 import asyncio
 from collections.abc import AsyncIterator
-
+from aiostream.stream import skiplast
 from core.event_loop.processor_registry import EventProcessorRegistry
-from . import Event
+from core.iterator.cache import LastValueIterator
+from core.transport.protocol import Transport
+from . import Event, InputEvent
 
-from .event_queue import EventQueue, EventQueueIterator
-
-
-class EventLoopProcessor:
+class TransportEventProcessor:
     def __init__(
         self,
-        event_queue: EventQueue,
+        transport: Transport,
         event_processor_registry: EventProcessorRegistry,
     ):
-        self.event_queue = event_queue
-        self.event_processors = event_processor_registry
+        self.__transport = transport
+        self.__event_processors = event_processor_registry
 
-    async def handle_event(self, coroutine: AsyncIterator[Event]):
-        try:
-            async for yielded_event in coroutine:
-                assert isinstance(
-                    yielded_event, Event
-                ), f"Processor yielded an item that is not an Event: {yielded_event}"
-
-                await self.event_queue.push(yielded_event)
-        except Exception as error:
-            print(error)
-
-    async def start(self):
+    async def fire_event(self, event: InputEvent):
         """
         take an event from the loop. the event will be a serialized conversation containing user and assistant messages.
         the set of messages will be passed to the agent, which will return a response. the response will be appended to the conversation.
@@ -35,13 +23,17 @@ class EventLoopProcessor:
 
         the updated conversation should only be put back in the event loop if there are tool calls being made.
         """
-        read_only_queue = EventQueueIterator(self.event_queue)
-        async for event in read_only_queue:
-            for processor in self.event_processors.processors:
-                if not await processor.can_process(event):
-                    continue
+        for processor in self.__event_processors.processors:
+            if not await processor.can_process(event):
+                continue
 
-                coroutine = processor.process(event)
-                task = asyncio.create_task(self.handle_event(coroutine))
-                # todo: check if we need to store the task somewhere and cancel it
-                # or will stop-iteration handle everything on keyboard-interrupt
+            worker = LastValueIterator(processor.process(event))
+            async with skiplast(worker, n = 1).stream() as worker_events:
+                async for yielded_event in worker_events:
+                    assert isinstance(
+                        yielded_event, Event
+                    ), f"Processor yielded an item that is not an Event: {yielded_event}"
+
+                    await self.__transport.handle_thinking_output(yielded_event)
+
+            await self.__transport.handle_final_output(worker.last)

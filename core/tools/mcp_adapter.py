@@ -1,4 +1,5 @@
-from typing import Any, Optional, Protocol
+from collections.abc import AsyncGenerator
+from typing import Any, Protocol
 
 from core.tools import Tool, ToolResult
 from fastmcp import Client
@@ -14,12 +15,12 @@ class McpToolAdapterImpl(McpToolAdapter):
         self.client = Client(mcp_url)
 
     def __create_tool(self, client: Client, mcp_tool: McpTool):
-        async def callback(arguments: Optional[dict[str, Any]]) -> ToolResult:
+        async def callback(arguments: dict[str, Any]|None) -> AsyncGenerator[ToolResult]:
             async with client:
                 result = await client.call_tool(mcp_tool.name, arguments)
             
             text_result = ''.join([x.text for x in result.content if isinstance(x, TextContent)])
-            return ToolResult(output=text_result)
+            yield ToolResult(output=text_result)
 
         return Tool(
             name=mcp_tool.name,

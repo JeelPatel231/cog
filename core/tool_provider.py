@@ -1,5 +1,9 @@
 import json
 from typing import Any, Protocol
+
+from typing_extensions import AsyncIterator
+from core.event_loop import OutputEvent
+from core.iterator.cache import LastValueIterator
 from core.tools import Tool, ToolResult
 from core.logger import logger
 
@@ -37,11 +41,11 @@ class ToolProvider:
 
 
     # The execution should be handled by a separate class that takes in the tool registry as a dependency.
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolResult:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> LastValueIterator[OutputEvent]:
         logger.debug(f"Calling tool '{tool_name}' with arguments: {arguments}")
         tool = await self._tool_registry.get_tool(tool_name)
         try:
-            return await tool.callback(arguments)
+            return LastValueIterator(tool.callback(arguments))
         except Exception as error:
             logger.error(f"Error executing tool '{tool_name}': {error}")
             return ToolResult(output=f"Error executing tool '{tool_name}': {error}")
@@ -68,35 +72,3 @@ class ToolProvider:
             "When needed, call them with valid JSON arguments that match the input schema.\n\n"
             f"{json.dumps(only_info, indent=2)}"
         )
-
-
-class ToolCallProcessor(Protocol):
-    async def process_tool_call(self, raw_tool_calls: str) -> list[str]: ...
-
-
-class ToolCallProcessorImpl:
-    def __init__(self, tool_provider: ToolProvider):
-        self._tool_provider = tool_provider
-
-    async def process_tool_call(self, raw_tool_calls: str) -> list[str]:
-        tool_calls = json.loads(raw_tool_calls)
-        results: list[str] = []
-
-        for tool_call in tool_calls:
-            tool_name = tool_call.get("name") or ""
-            raw_arguments = tool_call.get("arguments") or "{}"
-
-            if isinstance(raw_arguments, str):
-                arguments = json.loads(raw_arguments)
-            elif isinstance(raw_arguments, dict):
-                arguments = raw_arguments
-            else:
-                arguments = {}
-
-            try:
-                result = await self._tool_provider.call_tool(tool_name, arguments)
-                results.append(f"Tool '{tool_name}' result: {result.output}")
-            except Exception as error:
-                results.append(f"Tool '{tool_name}' call failed: {error}")
-
-        return results

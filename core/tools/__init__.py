@@ -1,17 +1,17 @@
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Optional
-
-from pydantic import BaseModel
+from typing import Any, Callable
+from core.event_loop import OutputEvent
 
 
 # TODO: tools should be able to return much more than just strings. like images.
-class ToolResult(BaseModel):
+@dataclass
+class ToolResult(OutputEvent):
     output: str
 
 @dataclass(frozen=True)
 class Tool[T: dict]:
     name: str
     description: str
-    callback: Callable[[Optional[T]], Awaitable[ToolResult]]
-    args_json_schema: Optional[dict[str, Any]]
-
+    callback: Callable[[T|None], AsyncGenerator[OutputEvent]]
+    args_json_schema: dict[str, Any]|None

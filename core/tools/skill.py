@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,12 +70,13 @@ class SkillToolArgs(BaseModel):
     skill_name: str
 
 
-async def skill(args: dict[str, Any] | None) -> ToolResult:
+async def skill(args: dict[str, Any] | None) -> AsyncGenerator[ToolResult]:
     skill_args = SkillToolArgs.model_validate(args)
     for skills_root in os.environ.get("SKILLS_PATH", "").split(":"):
         skill_path = Path(skills_root) / skill_args.skill_name
         if skill_path.exists():
-            return ToolResult(output=Skill.from_directory(skill_path).instructions())
+            yield ToolResult(output=Skill.from_directory(skill_path).instructions())
+            return
 
     raise ValueError(f"Skill {skill_args.skill_name} not found in SKILLS_PATH.")
 

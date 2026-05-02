@@ -1,7 +1,8 @@
 import asyncio
 from typing import Any
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 
+from aiostream.stream import merge, skiplast
 from pydantic import BaseModel, ConfigDict
 
 from core.chat import (
@@ -12,9 +13,10 @@ from core.chat import (
     UserMessage,
 )
 from core.chat import SystemMessage, TextMessageContent, UserMessage
-from core.event_loop.event_queue import EventQueue
+from core.event_loop import OutputEvent
 from core.event_processors.subagent import SubAgentThinkingOutput
 from core.history_transformer import HistoryTransformer
+from core.iterator.cache import LastValueIterator
 from core.tool_provider import ToolProvider
 
 from . import Tool, ToolResult
@@ -72,18 +74,22 @@ class SubAgent:
             tool_calls = response.tool_calls
 
             tool_result_futures = [
-                self.tool_provider.call_tool(tool.name, tool.arguments)
+                await self.tool_provider.call_tool(tool.name, tool.arguments)
                 for tool in tool_calls
             ]
-            outputs = await asyncio.gather(*tool_result_futures)
+
+            async with merge(*tool_result_futures).stream() as merged_tool_calls:
+                async for event in merged_tool_calls:
+                    yield event
+
             tool_results = [
                 ToolResponseMessage(
                     role="tool",
                     id=tool.id,
                     name=tool.name,
-                    content=TextMessageContent(text=result.output),
+                    content=TextMessageContent(text=result.last.output),
                 )
-                for tool, result in zip(tool_calls, outputs)
+                for tool, result in zip(tool_calls, tool_result_futures)
             ]
 
             for tool_result in tool_results:
@@ -100,8 +106,8 @@ You should reason through all the steps needed to complete the task.
 If the task needs extra information, or fails, or is not possible to complete, you provide all the details in the final output so the main agent can decide what to do next.
 """.strip()
 
-def call_subagent(subagent: SubAgent, event_queue: EventQueue):
-    async def inner(args: dict[str, Any] | None) -> ToolResult:
+def call_subagent(subagent: SubAgent):
+    async def inner(args: dict[str, Any] | None) -> AsyncGenerator[OutputEvent]:
         input = SubAgentInput.model_validate(args)
         print(f"Calling sub-agent with instruction: {input.instruction}")
         conversation = [
@@ -113,14 +119,13 @@ def call_subagent(subagent: SubAgent, event_queue: EventQueue):
                     ),
             UserMessage(role="user", content=TextMessageContent(text=input.instruction))
         ]
-        last_event = None
-        async for event in subagent.do_task(conversation):
-            last_event = event
-            await event_queue.push(event)
 
-        assert last_event is not None
-
-        return ToolResult(output=last_event.data)
+        last_value = LastValueIterator(subagent.do_task(conversation))
+        async with skiplast(last_value, n = 1).stream() as streamer:
+            async for event in streamer:
+                yield event
+        
+        yield ToolResult(output = last_value.last.data)
 
     return inner
 
@@ -135,10 +140,10 @@ and you want to offload that work to a separate agent, in order to keep your con
 focused on high-level instructions and final outputs.
 """
 
-def SubAgentTool(subagent: SubAgent, event_queue: EventQueue):
+def SubAgentTool(subagent: SubAgent):
     return Tool(
         name="subagent",
         description="Delegate tasks to a sub-agent.",
-        callback=call_subagent(subagent, event_queue),
+        callback=call_subagent(subagent),
         args_json_schema=SubAgentInput.model_json_schema()
     )

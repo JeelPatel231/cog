@@ -27,10 +27,10 @@ from core.chat import (
     UserMessage,
 )
 from core.event_processors.message import MessageEvent
-from core.in_memory_event_queue import InMemoryEventQueue
 from core.chat.openai_chat import OpenAIChat
-from core.event_loop.processor import EventLoopProcessor
+from core.event_loop.processor import TransportEventProcessor
 from core.tool_provider import InMemoryToolRegistry, ToolProvider
+from transport.telegram.transport_impl import TelegramTransport
 
 import logging
 
@@ -38,18 +38,19 @@ import logging
 
 
 async def run_once() -> None:
-    queue = InMemoryEventQueue()
     no_op_history_transformer = PassthroughHistoryTransformer()
 
     tool_registry = InMemoryToolRegistry()
     tool_provider = ToolProvider(tool_registry)
     # agent = OpenRouterChat(tool_provider=tool_provider, model="gpt-4o-mini")
-    agent = OpenAIChat(api_key='mock', base_url='http://localhost:8080/v1', tool_provider=tool_provider)
+    agent = OpenAIChat(
+        api_key="mock", base_url="http://localhost:8080/v1", tool_provider=tool_provider
+    )
 
     subagent = SubAgent(agent, tool_provider, no_op_history_transformer)
 
     await tool_registry.register_tool(
-        SubAgentTool(subagent, queue),
+        SubAgentTool(subagent),
         SkillTool,
         ReadTool,
         RunTool,
@@ -63,20 +64,23 @@ async def run_once() -> None:
         ),
     }
 
+    # these will be gone. maybe some kind of mapped classl will be used for external usage.
+    # for internal outputs, we still use this output processors.
     output_processors = {
         UserReplyEventProcessor(),
         SubAgentThinkingEventProcessor(),
     }
 
     event_processor_registry = EventProcessorRegistry(
-        initial_processors=input_processors | output_processors
+        initial_processors=input_processors #| output_processors
     )
 
-    processor = EventLoopProcessor(
-        event_queue=queue, event_processor_registry=event_processor_registry
+    telegram_transport = TelegramTransport()
+    processor = TransportEventProcessor(
+        transport=telegram_transport, event_processor_registry=event_processor_registry
     )
 
-    instruction = "I want you to start a subagent to calculate 134168734 times 381246. No hallucinations, only precise answers."
+    instruction = "calculate 134168734 times 381246 using math skill. No hallucinations, only precise answers."
 
     conversation: list[ChatMessage] = [
         UserMessage(
@@ -87,9 +91,7 @@ async def run_once() -> None:
 
     event = MessageEvent(data=conversation)
 
-    await queue.push(event)
-
-    await processor.start()
+    await processor.fire_event(event)
 
 
 if __name__ == "__main__":

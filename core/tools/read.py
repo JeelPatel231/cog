@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from pathlib import Path
 import os
 from typing import Any
@@ -17,7 +18,7 @@ def is_valid_absolute_path(path_str: str) -> bool:
 class ReadParams(BaseModel):
     absolute_path: str
 
-async def read(args: dict[str, Any] | None) -> ToolResult:
+async def read(args: dict[str, Any] | None) -> AsyncGenerator[ToolResult]:
     read = ReadParams.model_validate(args)
 
     if not is_valid_absolute_path(read.absolute_path):
@@ -25,7 +26,7 @@ async def read(args: dict[str, Any] | None) -> ToolResult:
             "The path is not absolute, or the agent is not authorized to read it"
         )
     with open(read.absolute_path, "r") as f:
-        return ToolResult(output=f.read())
+        yield ToolResult(output=f.read())
 
 
 ReadTool = Tool(

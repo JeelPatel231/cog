@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -17,9 +18,9 @@ class RunResult:
 
 class RunToolArgs(BaseModel):
     absolute_path: str
-    arguments: List[str]
+    arguments: list[str]
 
-async def run(args: dict[str, Any] | None) -> ToolResult:
+async def run(args: dict[str, Any] | None) -> AsyncGenerator[ToolResult]:
     run = RunToolArgs.model_validate(args)
     if not is_valid_absolute_path(run.absolute_path):
         raise ValueError("The path is not absolute, or the agent is not authorized to read it")
@@ -42,7 +43,7 @@ async def run(args: dict[str, Any] | None) -> ToolResult:
         stderr=stderr.decode(),
         return_code=process.returncode or 0
     )
-    return ToolResult(output=f"Return code: {run_result.return_code}\nSTDOUT:\n{run_result.stdout}\nSTDERR:\n{run_result.stderr}")
+    yield ToolResult(output=f"Return code: {run_result.return_code}\nSTDOUT:\n{run_result.stdout}\nSTDERR:\n{run_result.stderr}")
 
 RunTool = Tool(
     name="run",
